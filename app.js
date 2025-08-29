@@ -17,11 +17,9 @@ class TranscripteurReunion {
                            window.navigator.standalone === true;
         this.isPWA = this.isStandalone;
         
-        // 🔥 NOUVEAU : Gestion spécifique iOS PWA
         this.iosPermissionRequested = false;
         this.microphonePermissionStatus = 'unknown';
         
-        // Gestion des pauses
         this.lastSpeechTime = null;
         this.pauseTimeout = null;
         this.pauseThreshold = 2000;
@@ -32,19 +30,15 @@ class TranscripteurReunion {
         this.initSpeechRecognition();
         this.bindEvents();
         this.showMobileInfo();
-        
-        // 🔥 NOUVEAU : Test permissions au démarrage
         this.checkMicrophonePermissions();
     }
 
     // 🔥 NOUVEAU : Vérification permissions microphone avancée
     async checkMicrophonePermissions() {
         try {
-            // Test pour iOS PWA
             if (this.isIOS && this.isPWA) {
                 console.log('🍎 iOS PWA détecté - Configuration spéciale...');
                 
-                // Vérifier si Navigator.permissions est disponible
                 if ('permissions' in navigator) {
                     const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
                     this.microphonePermissionStatus = permissionStatus.state;
@@ -62,7 +56,6 @@ class TranscripteurReunion {
         }
     }
 
-    // 🔥 NOUVEAU : Message d'erreur spécifique iOS PWA
     showIOSPermissionError() {
         const errorDiv = document.createElement('div');
         errorDiv.style.cssText = `
@@ -79,7 +72,7 @@ class TranscripteurReunion {
             <p><strong>Solution obligatoire :</strong></p>
             <ol style="text-align: left; margin: 10px 0;">
                 <li>Supprimer l'app de l'écran d'accueil</li>
-                <li>Ouvrir Safari → poc23.github.io/transcripteur</li>
+                <li>Ouvrir Safari → votre-site.com</li>
                 <li>Autoriser le micro dans Safari</li>
                 <li>Réinstaller l'app (Partager → Sur l'écran d'accueil)</li>
             </ol>
@@ -105,16 +98,12 @@ class TranscripteurReunion {
         };
 
         this.businessKeywords = {
-            'budget': 3, 'planning': 2, 'deadline': 3, 'livrable': 2, 'milestone': 2,
-            'objectif': 3, 'target': 2, 'kpi': 3, 'roi': 3, 'revenus': 3, 'coûts': 2,
-            'client': 2, 'prospect': 2, 'lead': 2, 'conversion': 2, 'marketing': 2,
-            'commercial': 2, 'ventes': 2, 'négociation': 2, 'projet': 2, 'équipe': 1
+            'budget': 3, 'coût': 3, 'prix': 3, 'chiffre d\'affaires': 5, 'bénéfice': 4,
+            'planning': 4, 'délai': 4, 'échéance': 4, 'livraison': 3,
+            'client': 4, 'prospect': 3, 'vente': 3, 'marketing': 3,
+            'équipe': 3, 'ressources': 3, 'recrutement': 4, 'formation': 3,
+            'projet': 4, 'objectif': 4, 'stratégie': 4, 'décision': 4
         };
-
-        this.fillerWords = [
-            'euh', 'heu', 'hem', 'bon', 'voilà', 'donc euh', 'en fait', 'du coup',
-            'genre', 'quoi', 'hein', 'bon ben', 'alors euh', 'et puis euh'
-        ];
     }
 
     initElements() {
@@ -136,78 +125,65 @@ class TranscripteurReunion {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             this.recognition = new SpeechRecognition();
 
-            // 🔥 CONFIGURATION OPTIMISÉE iOS PWA
             this.recognition.continuous = true;
             this.recognition.interimResults = true;
             this.recognition.lang = 'fr-FR';
             
-            // iOS PWA : Paramètres plus conservateurs
             if (this.isIOS && this.isPWA) {
                 this.recognition.maxAlternatives = 1;
             } else {
                 this.recognition.maxAlternatives = 3;
             }
 
-            let finalTranscript = '';
-            let interimTranscript = '';
-
             this.recognition.onresult = (event) => {
-                interimTranscript = '';
-                finalTranscript = '';
+                let interimTranscript = '';
+                let finalTranscript = '';
 
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
-                        finalTranscript += transcript;
+                        finalTranscript += transcript + ' ';
                     } else {
                         interimTranscript += transcript;
                     }
                 }
 
                 if (finalTranscript) {
-                    this.transcriptionText += ' ' + finalTranscript;
+                    this.lastSpeechTime = Date.now();
+                    this.rawTranscriptionText += finalTranscript;
+                    this.transcriptionText += finalTranscript;
                     this.updateTranscription();
                     this.generateSummary();
-                    this.lastSpeechTime = Date.now();
+
+                    if (this.pauseTimeout) {
+                        clearTimeout(this.pauseTimeout);
+                    }
+                    this.startPauseTimer();
                 }
+
+                this.statusText.textContent = '🎤 En cours de transcription...';
             };
 
-            // 🔥 GESTION D'ERREURS SPÉCIFIQUE iOS PWA
             this.recognition.onerror = (event) => {
-                console.error('❌ Erreur reconnaissance vocale:', event.error);
-                
-                if (this.isIOS && this.isPWA) {
-                    switch (event.error) {
-                        case 'not-allowed':
-                            this.statusText.textContent = '❌ Microphone refusé - Voir instructions ci-dessus';
-                            this.showIOSPermissionError();
-                            break;
-                        case 'audio-capture':
-                            this.statusText.textContent = '❌ Problème audio - Redémarrer l\'app';
-                            break;
-                        case 'network':
-                            this.statusText.textContent = '⚠️ Problème réseau - Reconnexion...';
-                            this.restartRecognition();
-                            break;
-                        default:
-                            this.statusText.textContent = `⚠️ Erreur: ${event.error}`;
+                console.error('Erreur reconnaissance vocale:', event.error);
+                if (event.error === 'not-allowed') {
+                    this.statusText.textContent = '❌ Accès microphone refusé';
+                    if (this.isIOS && this.isPWA) {
+                        this.showIOSPermissionError();
                     }
+                } else if (event.error === 'no-speech') {
+                    this.statusText.textContent = '🔇 Aucune parole détectée';
+                    this.restartRecognition();
                 } else {
-                    if (event.error === 'network') {
-                        this.statusText.textContent = '⚠️ Problème réseau - Reconnexion...';
-                        this.restartRecognition();
-                    }
+                    this.statusText.textContent = '⚠️ Erreur reconnaissance vocale';
+                    this.restartRecognition();
                 }
             };
 
             this.recognition.onend = () => {
                 if (this.isRecording) {
                     console.log('🔄 Redémarrage automatique reconnaissance vocale...');
-                    setTimeout(() => {
-                        if (this.isRecording) {
-                            this.recognition.start();
-                        }
-                    }, 1000);
+                    this.restartRecognition();
                 }
             };
 
@@ -216,7 +192,6 @@ class TranscripteurReunion {
         }
     }
 
-    // 🔥 NOUVEAU : Redémarrage sécurisé pour iOS PWA
     restartRecognition() {
         if (this.isRecording && this.recognition) {
             setTimeout(() => {
@@ -228,7 +203,7 @@ class TranscripteurReunion {
                 } catch (error) {
                     console.log('⚠️ Impossible de redémarrer:', error);
                 }
-            }, this.isIOS ? 2000 : 1000); // Délai plus long sur iOS
+            }, this.isIOS ? 2000 : 1000);
         }
     }
 
@@ -279,7 +254,6 @@ class TranscripteurReunion {
             this.downloadAllFiles(timestamp);
         });
 
-        // 🔥 NOUVEAU : Gestion spéciale focus/blur pour iOS PWA
         if (this.isIOS && this.isPWA) {
             document.addEventListener('visibilitychange', () => {
                 if (document.hidden && this.isRecording) {
@@ -292,7 +266,7 @@ class TranscripteurReunion {
         }
     }
 
-    // 🔥 MÉTHODE STARTRECORDING OPTIMISÉE iOS PWA
+    // 🔥 FIX MEDIARECORDER POUR iOS
     async startRecording() {
         try {
             console.log('🎤 Démarrage enregistrement...', {
@@ -301,18 +275,16 @@ class TranscripteurReunion {
                 userAgent: navigator.userAgent.substring(0, 50)
             });
 
-            // 🔥 DEMANDE PERMISSION EXPLICITE POUR iOS PWA
             const constraints = {
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
-                    sampleRate: this.isIOS ? 16000 : 44100, // Fréquence réduite sur iOS
+                    sampleRate: this.isIOS ? 16000 : 44100,
                 }
             };
 
             this.statusText.textContent = '🎤 Demande accès microphone...';
 
-            // Attendre plus longtemps sur iOS PWA
             const timeoutDuration = this.isIOS && this.isPWA ? 10000 : 5000;
             const streamPromise = navigator.mediaDevices.getUserMedia(constraints);
             const timeoutPromise = new Promise((_, reject) => 
@@ -322,10 +294,30 @@ class TranscripteurReunion {
             this.audioStream = await Promise.race([streamPromise, timeoutPromise]);
             console.log('✅ Stream audio obtenu:', this.audioStream.getTracks());
 
-            // Initialiser MediaRecorder
-            this.mediaRecorder = new MediaRecorder(this.audioStream, {
-                mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
-            });
+            // 🔥 DÉTECTION FORMAT SUPPORTÉ iOS
+            let mimeType = 'audio/webm';
+            if (this.isIOS) {
+                // iOS supporte audio/mp4 et audio/aac
+                if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                    mimeType = 'audio/mp4';
+                } else if (MediaRecorder.isTypeSupported('audio/aac')) {
+                    mimeType = 'audio/aac';
+                } else if (MediaRecorder.isTypeSupported('audio/wav')) {
+                    mimeType = 'audio/wav';
+                } else {
+                    console.warn('⚠️ Format audio par défaut sur iOS');
+                    mimeType = undefined; // Laisser le navigateur décider
+                }
+            } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+                mimeType = 'audio/webm';
+            }
+
+            console.log('🎵 Format audio choisi:', mimeType || 'défaut navigateur');
+
+            // Initialiser MediaRecorder avec format adapté
+            this.mediaRecorder = new MediaRecorder(this.audioStream, 
+                mimeType ? { mimeType } : undefined
+            );
             this.audioChunks = [];
 
             this.mediaRecorder.ondataavailable = (event) => {
@@ -335,12 +327,11 @@ class TranscripteurReunion {
                 }
             };
 
-            this.mediaRecorder.start(1000); // Chunks de 1 seconde
+            this.mediaRecorder.start(1000);
 
-            // 🔥 DÉLAI SPÉCIAL iOS PWA AVANT RECONNAISSANCE VOCALE
+            // Délai avant reconnaissance vocale
             await new Promise(resolve => setTimeout(resolve, this.isIOS && this.isPWA ? 2000 : 500));
 
-            // Démarrer reconnaissance vocale
             this.recognition.start();
             console.log('🎙️ Reconnaissance vocale démarrée');
 
@@ -356,7 +347,6 @@ class TranscripteurReunion {
             this.startTimer();
             console.log('✅ Enregistrement démarré avec succès');
 
-            // 🔥 NOTIFICATION SUCCÈS POUR iOS PWA
             if (this.isIOS && this.isPWA) {
                 this.statusText.textContent = '✅ Micro reconnecté - Redémarrage...';
                 setTimeout(() => {
@@ -371,7 +361,6 @@ class TranscripteurReunion {
             this.startBtn.disabled = false;
             this.stopBtn.disabled = true;
 
-            // Messages d'erreur spécifiques
             if (error.name === 'NotAllowedError' || error.message === 'Permission denied') {
                 this.statusText.textContent = '❌ Accès micro refusé';
                 if (this.isIOS && this.isPWA) {
@@ -381,11 +370,13 @@ class TranscripteurReunion {
                 this.statusText.textContent = '❌ Microphone non trouvé';
             } else if (error.message === 'timeout') {
                 this.statusText.textContent = '⏱️ Timeout - Réessayer';
+            } else if (error.name === 'NotSupportedError') {
+                this.statusText.textContent = '❌ Format audio non supporté';
+                console.error('Format MediaRecorder non supporté sur cet appareil');
             } else {
                 this.statusText.textContent = '❌ Erreur microphone';
             }
 
-            // 🔥 SUGGESTION AUTOMATIQUE POUR iOS PWA
             if (this.isIOS && this.isPWA) {
                 setTimeout(() => {
                     alert('💡 Suggestion iOS PWA:\n\n1. Fermer complètement l\'app\n2. Ouvrir Safari\n3. Aller sur le site web\n4. Tester le micro\n5. Réinstaller l\'app');
@@ -398,7 +389,6 @@ class TranscripteurReunion {
         console.log('⏹️ Arrêt enregistrement...');
         this.isRecording = false;
 
-        // Arrêter reconnaissance vocale
         if (this.recognition) {
             try {
                 this.recognition.stop();
@@ -408,13 +398,11 @@ class TranscripteurReunion {
             }
         }
 
-        // Arrêter enregistrement audio
         if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
             this.mediaRecorder.stop();
             console.log('📹 MediaRecorder arrêté');
         }
 
-        // Fermer stream audio
         if (this.audioStream) {
             this.audioStream.getTracks().forEach(track => {
                 track.stop();
@@ -423,24 +411,20 @@ class TranscripteurReunion {
             this.audioStream = null;
         }
 
-        // Nettoyer timeouts
         if (this.pauseTimeout) {
             clearTimeout(this.pauseTimeout);
             this.pauseTimeout = null;
         }
 
-        // Mise à jour interface
         this.startBtn.disabled = false;
         this.stopBtn.disabled = true;
         this.statusText.textContent = '✅ Enregistrement terminé';
         document.body.classList.remove('recording');
 
-        // Arrêter timer
         if (this.timer) {
             clearInterval(this.timer);
         }
 
-        // Améliorer transcription finale
         if (this.transcriptionText.trim()) {
             this.transcriptionText = this.improveTranscript(this.transcriptionText);
             this.updateTranscription();
@@ -450,151 +434,66 @@ class TranscripteurReunion {
         console.log('✅ Enregistrement arrêté avec succès');
     }
 
-    // Méthodes restantes identiques...
-    startPauseTimer() {
-        this.pauseTimeout = setTimeout(() => {
-            if (this.isRecording) {
-                this.transcriptionText += '\n\n';
-                this.updateTranscription();
-                console.log('Pause détectée - Saut de ligne ajouté');
-            }
-        }, this.pauseThreshold);
-    }
-
-    extractKeywords(text) {
-        const lowerText = text.toLowerCase();
-        const foundKeywords = [];
-        Object.keys(this.businessKeywords).forEach(keyword => {
-            if (lowerText.includes(keyword)) {
-                foundKeywords.push(keyword);
-            }
-        });
-        return foundKeywords;
-    }
-
-    generateSubtitle(segment) {
-        const keywords = segment.keywords;
-        if (keywords.length === 0) return 'Discussion Générale';
-        
-        if (keywords.includes('budget') || keywords.includes('coûts') || keywords.includes('revenus')) {
-            return 'Finances & Budget';
-        }
-        if (keywords.includes('planning') || keywords.includes('deadline') || keywords.includes('milestone')) {
-            return 'Planning & Échéances';
-        }
-        if (keywords.includes('client') || keywords.includes('commercial') || keywords.includes('ventes')) {
-            return 'Commercial & Clients';
-        }
-        if (keywords.includes('équipe') || keywords.includes('projet')) {
-            return 'Gestion d\'Équipe';
-        }
-        
-        return keywords[0].charAt(0).toUpperCase() + keywords[0].slice(1);
-    }
-
+    // Méthodes d'amélioration et formatage
     improveTranscript(text) {
-        let improved = text;
-
+        let improvedText = text;
+        
         Object.entries(this.corrections).forEach(([wrong, correct]) => {
             const regex = new RegExp(`\\b${wrong}\\b`, 'gi');
-            improved = improved.replace(regex, correct);
+            improvedText = improvedText.replace(regex, correct);
         });
 
-        improved = this.removeFiller(improved);
-        improved = this.improvePunctuation(improved);
-        improved = this.improveCapitalization(improved);
-
-        return improved;
-    }
-
-    removeFiller(text) {
-        this.fillerWords.forEach(filler => {
-            const regex = new RegExp(`\\b${filler}\\b`, 'gi');
-            text = text.replace(regex, '');
-        });
-
-        text = text.replace(/\s{2,}/g, ' ').trim();
-        return text;
-    }
-
-    quickImprove(text) {
-        let improved = text.toLowerCase();
-        const quickFixes = {
-            'euh': '', 'heu': '', 'bon': '', 'donc euh': 'donc', 'et puis euh': 'et puis'
-        };
-
-        Object.entries(quickFixes).forEach(([wrong, correct]) => {
-            improved = improved.replace(new RegExp(wrong, 'gi'), correct);
-        });
-
-        return improved.trim();
-    }
-
-    improvePunctuation(text) {
-        text = text.replace(/(\w+)\s+(mais|et|ou|donc|car|ni|or)\s+/gi, '$1, $2 ');
-        text = text.replace(/\b(en effet|par exemple|notamment|c\'est-à-dire)\b/gi, ', $1,');
-        return text;
-    }
-
-    improveCapitalization(text) {
-        text = text.charAt(0).toUpperCase() + text.slice(1);
-        text = text.replace(/\.\s+([a-z])/g, (match, p1) => '. ' + p1.toUpperCase());
-
-        const alwaysCapital = ['API', 'KPI', 'ROI', 'PDF', 'URL', 'SEO', 'CRM', 'ERP', 'CDI', 'CDD', 'RH'];
-        alwaysCapital.forEach(word => {
-            const regex = new RegExp(`\\b${word.toLowerCase()}\\b`, 'gi');
-            text = text.replace(regex, word);
-        });
-
-        return text;
+        return improvedText
+            .replace(/\s+/g, ' ')
+            .replace(/([.!?])\s*([A-Z])/g, '$1 $2')
+            .trim();
     }
 
     generateSummary() {
-        const sentences = this.transcriptionText.split(/[.!?]+/).filter(s => s.trim().length > 10);
-        if (sentences.length === 0) return;
+        if (!this.transcriptionText.trim()) return;
 
-        // Analyser et scorer les phrases
-        const scoredSentences = sentences.map(sentence => {
-            let score = 0;
-            const lowerSentence = sentence.toLowerCase();
+        const sentences = this.transcriptionText
+            .split(/[.!?]+/)
+            .map(s => s.trim())
+            .filter(s => s.length > 10)
+            .map(s => ({ text: s, score: 0 }));
 
-            Object.entries(this.businessKeywords).forEach(([keyword, weight]) => {
-                if (lowerSentence.includes(keyword)) {
-                    score += weight;
-                }
-            });
-
-            return { text: sentence.trim(), score };
+        sentences.forEach(sentence => {
+            const lowerText = sentence.text.toLowerCase();
+            const keywords = this.extractKeywords(lowerText);
+            sentence.score = keywords.reduce((score, keyword) => 
+                score + (this.businessKeywords[keyword] || 1), 0
+            );
+            
+            if (lowerText.includes('important') || lowerText.includes('décision')) {
+                sentence.score += 3;
+            }
+            if (sentence.text.length > 50) {
+                sentence.score += 1;
+            }
         });
 
-        // Sélectionner les meilleures phrases
-        const importantSentences = scoredSentences
-            .filter(s => s.score > 0)
+        const topSentences = sentences
             .sort((a, b) => b.score - a.score)
-            .slice(0, Math.min(5, Math.ceil(sentences.length * 0.3)));
+            .slice(0, Math.min(8, Math.ceil(sentences.length * 0.3)));
 
-        // Grouper par thème
         const themes = {
-            finances: [],
-            planning: [],
-            commercial: [],
-            équipe: [],
-            général: []
+            finances: [], planning: [], commercial: [], équipe: [], général: []
         };
 
-        importantSentences.forEach(sentence => {
+        topSentences.forEach(sentence => {
             const lowerText = sentence.text.toLowerCase();
             let assigned = false;
-
-            if (lowerText.match(/budget|coût|prix|argent|financ|revenus|dépens/)) {
+            
+            if (lowerText.match(/budget|coût|prix|chiffre|bénéfice|financ/)) {
                 themes.finances.push(sentence.text);
                 assigned = true;
             }
-            if (lowerText.match(/planning|date|délai|échéance|livraison|deadline|timing/)) {
+            if (lowerText.match(/planning|délai|échéance|livraison|date|temps/)) {
                 themes.planning.push(sentence.text);
                 assigned = true;
             }
-            if (lowerText.match(/client|commercial|vente|prospect|marché|négociation/)) {
+            if (lowerText.match(/client|prospect|vente|marketing|commercial|marché/)) {
                 themes.commercial.push(sentence.text);
                 assigned = true;
             }
@@ -607,17 +506,13 @@ class TranscripteurReunion {
             }
         });
 
-        // Générer le résumé HTML
         let summaryHTML = '<div class="summary-title">📋 RÉSUMÉ EXÉCUTIF</div>\n\n';
 
         Object.entries(themes).forEach(([theme, sentences]) => {
             if (sentences.length > 0) {
                 const themeIcons = {
-                    finances: '💰',
-                    planning: '📅',
-                    commercial: '🤝',
-                    équipe: '👥',
-                    général: '📝'
+                    finances: '💰', planning: '📅', commercial: '🤝',
+                    équipe: '👥', général: '📝'
                 };
 
                 summaryHTML += `<div class="summary-section-title">${themeIcons[theme]} ${theme.toUpperCase()}</div>\n`;
@@ -628,7 +523,6 @@ class TranscripteurReunion {
             }
         });
 
-        // Extraire mots-clés principaux
         const keywordCounts = {};
         Object.keys(this.businessKeywords).forEach(keyword => {
             const count = (this.transcriptionText.toLowerCase().match(new RegExp(keyword, 'g')) || []).length;
@@ -647,7 +541,6 @@ class TranscripteurReunion {
             summaryHTML += `<div class="summary-item">${topKeywords.join(' • ')}</div>\n\n`;
         }
 
-        // Statistiques
         const wordCount = this.transcriptionText.split(/\s+/).length;
         const sentenceCount = sentences.length;
         
@@ -671,6 +564,27 @@ class TranscripteurReunion {
     updateTranscription() {
         this.transcriptionDiv.innerHTML = this.formatTranscriptionForDisplay(this.transcriptionText);
         this.transcriptionDiv.scrollTop = this.transcriptionDiv.scrollHeight;
+    }
+
+    startPauseTimer() {
+        this.pauseTimeout = setTimeout(() => {
+            if (this.isRecording) {
+                this.transcriptionText += '\n\n';
+                this.updateTranscription();
+                console.log('Pause détectée - Saut de ligne ajouté');
+            }
+        }, this.pauseThreshold);
+    }
+
+    extractKeywords(text) {
+        const lowerText = text.toLowerCase();
+        const foundKeywords = [];
+        Object.keys(this.businessKeywords).forEach(keyword => {
+            if (lowerText.includes(keyword)) {
+                foundKeywords.push(keyword);
+            }
+        });
+        return foundKeywords;
     }
 
     clearAll() {
@@ -697,11 +611,13 @@ class TranscripteurReunion {
                     alert('Aucun audio à télécharger');
                     return;
                 }
-                const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
-                this.downloadBlob(audioBlob, `reunion_audio_${timestamp}.wav`);
+                // 🔥 Extension dynamique selon format
+                const audioBlob = new Blob(this.audioChunks);
+                const extension = this.isIOS ? 'm4a' : 'webm';
+                this.downloadBlob(audioBlob, `reunion_audio_${timestamp}.${extension}`);
                 break;
 
-                        case 'transcript':
+            case 'transcript':
                 if (!this.transcriptionText.trim()) {
                     alert('Aucune transcription à télécharger');
                     return;
@@ -725,12 +641,8 @@ class TranscripteurReunion {
 
     formatTranscriptForDownload() {
         const currentDate = new Date().toLocaleDateString('fr-FR', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
         });
 
         let content = '='.repeat(80) + '\n';
@@ -740,7 +652,6 @@ class TranscripteurReunion {
         content += `⏱️  Durée : ${this.timerDisplay.textContent}\n\n`;
         content += '─'.repeat(80) + '\n\n';
 
-        // Formatage avec paragraphes préservés
         const paragraphs = this.transcriptionText.split(/\n\n+/);
         
         paragraphs.forEach((paragraph, index) => {
@@ -748,7 +659,6 @@ class TranscripteurReunion {
                 const cleanParagraph = paragraph.trim().replace(/\n/g, ' ');
                 const sentences = cleanParagraph.split(/[.!?]+/).filter(s => s.trim());
                 
-                // Reformater en paragraphe lisible
                 const formattedParagraph = sentences
                     .map(sentence => sentence.trim())
                     .filter(sentence => sentence.length > 0)
@@ -756,7 +666,6 @@ class TranscripteurReunion {
 
                 content += formattedParagraph + '\n\n';
                 
-                // Ajout séparateur visuel entre sections importantes
                 if (index < paragraphs.length - 1 && formattedParagraph.length > 100) {
                     content += '• • •\n\n';
                 }
@@ -765,15 +674,12 @@ class TranscripteurReunion {
 
         content += '\n' + '='.repeat(80) + '\n';
         content += `Transcription générée automatiquement le ${new Date().toLocaleString('fr-FR')}`;
-
         return content;
     }
 
     formatSummaryForDownload() {
         const currentDate = new Date().toLocaleDateString('fr-FR', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
+            year: 'numeric', month: 'long', day: 'numeric'
         });
 
         let content = '='.repeat(80) + '\n';
@@ -783,52 +689,57 @@ class TranscripteurReunion {
         content += `⏱️  Durée : ${this.timerDisplay.textContent}\n\n`;
         content += '─'.repeat(80) + '\n\n';
 
-        // Extraire le contenu texte du résumé HTML
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = this.summaryDiv.innerHTML;
-        
-        // Convertir en texte propre
         const summaryText = tempDiv.textContent || tempDiv.innerText || '';
+                const lines = summaryText.split('\n').filter(line => line.trim());
         
-        // Nettoyer et structurer
-        const lines = summaryText.split('\n').filter(line => line.trim());
+        let currentSection = '';
+        let sectionCount = 0;
         
         lines.forEach(line => {
             const trimmedLine = line.trim();
-            if (trimmedLine) {
-                // Détecter les titres de section
-                if (trimmedLine.includes('📋') || trimmedLine.includes('🎯') || 
-                    trimmedLine.includes('💡') || trimmedLine.includes('📊')) {
-                    content += '\n' + trimmedLine.toUpperCase() + '\n';
-                    content += '─'.repeat(50) + '\n';
+            if (!trimmedLine) return;
+            
+            // Détecter les titres de section
+            if (trimmedLine.includes('RÉSUMÉ EXÉCUTIF') || 
+                trimmedLine.includes('FINANCES') || 
+                trimmedLine.includes('PLANNING') || 
+                trimmedLine.includes('COMMERCIAL') || 
+                trimmedLine.includes('ÉQUIPE') || 
+                trimmedLine.includes('GÉNÉRAL') || 
+                trimmedLine.includes('MOTS-CLÉS') || 
+                trimmedLine.includes('STATISTIQUES')) {
+                
+                if (currentSection) {
+                    content += '\n';
                 }
-                // Détecter les sous-titres de thème
-                else if (trimmedLine.includes('💰') || trimmedLine.includes('📅') || 
-                         trimmedLine.includes('🤝') || trimmedLine.includes('👥') || 
-                         trimmedLine.includes('📝') || trimmedLine.includes('🏷️')) {
-                    content += '\n' + trimmedLine + '\n';
-                }
-                // Points de contenu
-                else if (trimmedLine.match(/^\d+\./)) {
-                    content += '  ' + trimmedLine + '\n';
-                }
-                // Statistiques et autres infos
-                else if (trimmedLine.includes('•') || trimmedLine.includes(':')) {
-                    content += '  ' + trimmedLine + '\n';
-                }
-                // Texte général
-                else if (trimmedLine.length > 3) {
-                    content += trimmedLine + '\n';
-                }
+                content += '\n' + trimmedLine + '\n';
+                content += '─'.repeat(40) + '\n';
+                currentSection = trimmedLine;
+                sectionCount = 0;
+            } else if (trimmedLine.match(/^\d+\./)) {
+                // Points numérotés
+                sectionCount++;
+                content += `\n${sectionCount}. ${trimmedLine.replace(/^\d+\.\s*/, '')}\n`;
+            } else if (trimmedLine.startsWith('•')) {
+                // Points avec puces
+                content += `${trimmedLine}\n`;
+            } else if (trimmedLine.includes('(')) {
+                // Mots-clés avec compteurs
+                content += `   ${trimmedLine}\n`;
+            } else {
+                // Texte normal
+                content += `${trimmedLine}\n`;
             }
         });
 
         // Nettoyage final
         content = content
-            .replace(/\n\n\n+/g, '\n\n') // Nettoyer excès sauts
-            .replace(/^\s+/gm, '') // Nettoyer espaces début ligne
-            .replace(/\s+$/gm, '') // Nettoyer espaces fin ligne
-            .trim(); // Suppression sauts fin
+            .replace(/\n\n\n+/g, '\n\n')
+            .replace(/^\s+/gm, '')
+            .replace(/\s+$/gm, '')
+            .trim();
 
         content += '\n\n' + '='.repeat(80) + '\n';
         content += `Résumé généré automatiquement le ${new Date().toLocaleString('fr-FR')}`;
@@ -868,18 +779,26 @@ class TranscripteurReunion {
         const a = document.createElement('a');
         a.href = url;
         a.download = filename;
-        a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        
+        // Nettoyage
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 100);
+        
+        console.log('📥 Fichier téléchargé:', filename);
     }
 
     startTimer() {
         this.timer = setInterval(() => {
+            if (!this.startTime) return;
+            
             const elapsed = Date.now() - this.startTime;
             const minutes = Math.floor(elapsed / 60000);
             const seconds = Math.floor((elapsed % 60000) / 1000);
+            
             this.timerDisplay.textContent = 
                 `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         }, 1000);
@@ -921,26 +840,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 text-align: center; 
                 padding: 50px; 
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                max-width: 600px;
-                margin: 0 auto;
-                background: #f8f9fa;
-                border-radius: 20px;
-                margin-top: 50px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
             ">
-                <h2 style="color: #e74c3c; margin-bottom: 20px;">❌ Erreur d'initialisation</h2>
-                <p style="color: #666; margin-bottom: 30px; line-height: 1.6;">
-                    L'application n'a pas pu se lancer correctement.<br>
+                <h1 style="font-size: 48px; margin-bottom: 30px;">🚫</h1>
+                <h2 style="margin-bottom: 20px;">Erreur d'initialisation</h2>
+                <p style="margin-bottom: 30px; max-width: 500px; line-height: 1.6;">
+                    L'application n'a pas pu démarrer correctement.<br>
                     Cela peut être dû à un problème de compatibilité navigateur.
                 </p>
                 
-                <div style="background: #fff; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #3498db;">
-                    <h4 style="margin: 0 0 10px 0; color: #2c3e50;">💡 Solutions recommandées :</h4>
-                    <ul style="text-align: left; color: #555; line-height: 1.8;">
-                        <li><strong>Chrome/Edge :</strong> Navigateurs optimaux</li>
-                        <li><strong>Firefox :</strong> Fonctionnalité limitée</li>
-                        <li><strong>Safari :</strong> Utiliser la version web uniquement</li>
-                        <li><strong>iOS PWA :</strong> Réinstaller depuis Safari</li>
+                <div style="background: rgba(255,255,255,0.1); padding: 30px; border-radius: 20px; margin: 30px 0;">
+                    <h3>💡 Solutions suggérées :</h3>
+                    <ul style="text-align: left; margin: 15px 0;">
+                        <li><strong>Chrome/Edge :</strong> Recommandé pour toutes les fonctionnalités</li>
+                        <li><strong>Firefox/Safari :</strong> Fonctionnalités limitées</li>
+                        <li><strong>iOS PWA :</strong> Redémarrer l'application</li>
+                        <li><strong>Android :</strong> Vérifier permissions dans Paramètres</li>
+                        <li><strong>Desktop :</strong> Autoriser accès microphone</li>
                     </ul>
                 </div>
                 
