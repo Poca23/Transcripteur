@@ -4,14 +4,14 @@ class TranscripteurReunion {
         this.mediaRecorder = null;
         this.audioChunks = [];
         this.transcriptionText = '';
-        this.rawTranscriptionText = ''; // Nouvelle propriété pour le texte brut
+        this.rawTranscriptionText = '';
         this.isRecording = false;
         this.startTime = null;
         this.timer = null;
-        
+
         // Dictionnaires d'amélioration
         this.initCorrectionDictionaries();
-        
+
         this.initElements();
         this.initSpeechRecognition();
         this.bindEvents();
@@ -21,76 +21,35 @@ class TranscripteurReunion {
         // Corrections automatiques des erreurs courantes
         this.corrections = {
             // Mots techniques souvent mal transcrits
-            'ai': 'IA',
-            'api': 'API',
-            'cdi': 'CDI',
-            'ses d i': 'CDI',
-            'ces d i': 'CDI',
-            'cdd': 'CDD',
-            'rh': 'RH',
-            'k p i': 'KPI',
-            'roi': 'ROI',
-            'p d f': 'PDF',
-            'u r l': 'URL',
-            'i p': 'IP',
-            'seo': 'SEO',
-            'crm': 'CRM',
-            'erp': 'ERP',
-            
+            'ai': 'IA', 'api': 'API', 'cdi': 'CDI', 'ses d i': 'CDI', 'ces d i': 'CDI',
+            'cdd': 'CDD', 'rh': 'RH', 'k p i': 'KPI', 'roi': 'ROI', 'p d f': 'PDF',
+            'u r l': 'URL', 'i p': 'IP', 'seo': 'SEO', 'crm': 'CRM', 'erp': 'ERP',
+
             // Expressions métier
-            'ça fait': 'cela fait',
-            'y a': 'il y a',
-            'faut qu\'on': 'il faut que nous',
-            'va falloir': 'il va falloir',
-            'c\'est à dire': 'c\'est-à-dire',
-            
+            'ça fait': 'cela fait', 'y a': 'il y a', 'faut qu\'on': 'il faut que nous',
+            'va falloir': 'il va falloir', 'c\'est à dire': 'c\'est-à-dire',
+
             // Corrections de ponctuation parlée
-            'virgule': ',',
-            'point': '.',
-            'deux points': ':',
-            'point virgule': ';',
-            'point d\'interrogation': '?',
-            'point d\'exclamation': '!',
-            
-            // Nombres souvent mal transcrits
-            'un': '1',
-            'deux': '2', 
-            'trois': '3',
-            'quatre': '4',
-            'cinq': '5',
-            'six': '6',
-            'sept': '7',
-            'huit': '8',
-            'neuf': '9',
-            'dix': '10',
-            
+            'virgule': ',', 'point': '.', 'deux points': ':', 'point virgule': ';',
+            'point d\'interrogation': '?', 'point d\'exclamation': '!',
+
             // Corrections contextuelles business
-            'chiffre d\'affaire': 'chiffre d\'affaires',
-            'ressources humaine': 'ressources humaines',
-            'meeting': 'réunion',
-            'call': 'appel',
-            'deadline': 'échéance',
-            'brief': 'briefing',
-            'feedback': 'retour',
-            'business': 'affaires'
+            'chiffre d\'affaire': 'chiffre d\'affaires', 'ressources humaine': 'ressources humaines',
+            'meeting': 'réunion', 'call': 'appel', 'deadline': 'échéance', 'brief': 'briefing',
+            'feedback': 'retour', 'business': 'affaires'
         };
 
-        // Mots-clés métier pour améliorer la contextualisation
+        // Mots-clés métier
         this.businessKeywords = [
-            'budget', 'planning', 'deadline', 'livrable', 'milestone',
-            'objectif', 'target', 'kpi', 'roi', 'revenus', 'coûts',
-            'client', 'prospect', 'lead', 'conversion', 'acquisition',
-            'marketing', 'commercial', 'ventes', 'négociation',
-            'projet', 'équipe', 'ressource', 'compétence', 'formation',
-            'stratégie', 'analyse', 'performance', 'résultat', 'impact',
-            'réunion', 'présentation', 'rapport', 'dashboard', 'suivi'
+            'budget', 'planning', 'deadline', 'livrable', 'milestone', 'objectif', 'target',
+            'kpi', 'roi', 'revenus', 'coûts', 'client', 'prospect', 'lead', 'conversion',
+            'marketing', 'commercial', 'ventes', 'négociation', 'projet', 'équipe'
         ];
 
-        // Expressions à nettoyer (hésitations, tics de langage)
+        // Expressions à nettoyer
         this.fillerWords = [
-            'euh', 'heu', 'hem', 'bon', 'voilà', 'donc euh',
-            'en fait', 'du coup', 'genre', 'quoi', 'hein',
-            'bon ben', 'alors euh', 'et puis euh'
+            'euh', 'heu', 'hem', 'bon', 'voilà', 'donc euh', 'en fait', 'du coup',
+            'genre', 'quoi', 'hein', 'bon ben', 'alors euh', 'et puis euh'
         ];
     }
 
@@ -112,17 +71,14 @@ class TranscripteurReunion {
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             this.recognition = new SpeechRecognition();
-            
-            // Configuration optimisée
+
             this.recognition.continuous = true;
             this.recognition.interimResults = true;
             this.recognition.lang = 'fr-FR';
-            this.recognition.maxAlternatives = 3; // Améliore la précision
-            
-            // Redémarrage automatique en cas d'arrêt
+            this.recognition.maxAlternatives = 3;
+
             this.recognition.onend = () => {
                 if (this.isRecording) {
-                    console.log('Redémarrage automatique de la reconnaissance vocale');
                     setTimeout(() => {
                         if (this.isRecording) {
                             this.recognition.start();
@@ -130,50 +86,36 @@ class TranscripteurReunion {
                     }, 100);
                 }
             };
-            
+
             this.recognition.onresult = (event) => {
                 let finalTranscript = '';
                 let interimTranscript = '';
-                
+
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript;
-                    
+
                     if (event.results[i].isFinal) {
-                        // Post-processing intelligent du texte final
                         finalTranscript += this.improveTranscript(transcript) + '. ';
                     } else {
-                        // Amélioration en temps réel pour l'affichage interim
                         interimTranscript += this.quickImprove(transcript);
                     }
                 }
-                
+
                 if (finalTranscript) {
                     this.rawTranscriptionText += finalTranscript;
                     this.transcriptionText += finalTranscript;
                     this.updateTranscription();
                     this.generateSummary();
                 }
-                
-                // Affichage avec texte interim amélioré
-                this.transcriptionDiv.innerHTML = this.transcriptionText + 
+
+                this.transcriptionDiv.innerHTML = this.formatTranscriptionForDisplay(this.transcriptionText) + 
                     '<span class="interim">' + interimTranscript + '</span>';
             };
-            
+
             this.recognition.onerror = (event) => {
                 console.error('Erreur reconnaissance vocale:', event.error);
-                
-                // Gestion d'erreurs améliorée
                 if (event.error === 'network') {
                     this.statusText.textContent = '⚠️ Problème réseau - Reconnexion...';
-                    setTimeout(() => {
-                        if (this.isRecording) {
-                            this.recognition.start();
-                        }
-                    }, 1000);
-                } else if (event.error === 'no-speech') {
-                    this.statusText.textContent = '🔴 En attente de parole...';
-                } else {
-                    this.statusText.textContent = 'Erreur: ' + event.error;
                 }
             };
         } else {
@@ -181,164 +123,294 @@ class TranscripteurReunion {
         }
     }
 
-    // 🔥 NOUVELLE MÉTHODE : Amélioration intelligente du transcript
+    // 🔥 NOUVEAU : Formatage de la transcription avec paragraphes
+    formatTranscriptionForDisplay(text) {
+        if (!text) return '';
+
+        // Division en paragraphes logiques (tous les 3-4 phrases)
+        const sentences = text.split(/(?<=[.!?])\s+/);
+        let formatted = '';
+        let sentenceCount = 0;
+
+        sentences.forEach(sentence => {
+            if (sentence.trim()) {
+                formatted += sentence.trim();
+                
+                // Ajout d'un saut de ligne après certains mots clés
+                if (sentence.toLowerCase().includes('maintenant') || 
+                    sentence.toLowerCase().includes('ensuite') ||
+                    sentence.toLowerCase().includes('d\'autre part')) {
+                    formatted += '<br><br>';
+                    sentenceCount = 0;
+                } else {
+                    formatted += ' ';
+                    sentenceCount++;
+                    
+                    // Nouveau paragraphe tous les 3-4 phrases
+                    if (sentenceCount >= 4) {
+                        formatted += '<br><br>';
+                        sentenceCount = 0;
+                    }
+                }
+            }
+        });
+
+        return formatted.trim();
+    }
+
     improveTranscript(text) {
         let improved = text.toLowerCase().trim();
-        
-        // 1. Suppression des mots de remplissage
+
+        // Suppression des mots de remplissage
         this.fillerWords.forEach(filler => {
             const regex = new RegExp(`\\b${filler}\\b`, 'gi');
             improved = improved.replace(regex, '');
         });
-        
-        // 2. Application des corrections automatiques
+
+        // Application des corrections automatiques
         Object.entries(this.corrections).forEach(([wrong, correct]) => {
             const regex = new RegExp(`\\b${wrong}\\b`, 'gi');
             improved = improved.replace(regex, correct);
         });
-        
-        // 3. Amélioration de la ponctuation
+
+        // Amélioration de la ponctuation et capitalisation
         improved = this.improvePunctuation(improved);
-        
-        // 4. Capitalisation intelligente
         improved = this.improveCapitalization(improved);
-        
-        // 5. Nettoyage des espaces multiples
         improved = improved.replace(/\s+/g, ' ').trim();
-        
+
         return improved;
     }
 
-    // Amélioration rapide pour l'affichage interim
     quickImprove(text) {
         let improved = text.toLowerCase();
-        
-        // Corrections rapides les plus courantes
         const quickFixes = {
-            'euh': '',
-            'heu': '',
-            'bon': '',
-            'donc euh': 'donc',
-            'et puis euh': 'et puis'
+            'euh': '', 'heu': '', 'bon': '', 'donc euh': 'donc', 'et puis euh': 'et puis'
         };
-        
+
         Object.entries(quickFixes).forEach(([wrong, correct]) => {
             improved = improved.replace(new RegExp(wrong, 'gi'), correct);
         });
-        
+
         return improved.trim();
     }
 
-    // 🔥 NOUVELLE MÉTHODE : Amélioration de la ponctuation
     improvePunctuation(text) {
-        // Ajout de virgules avant certains mots
         text = text.replace(/(\w+)\s+(mais|et|ou|donc|car|ni|or)\s+/gi, '$1, $2 ');
-        
-        // Ponctuation après certaines expressions
         text = text.replace(/\b(en effet|par exemple|notamment|c\'est-à-dire)\b/gi, ', $1,');
-        
-        // Points après les abréviations courantes
-        text = text.replace(/\b(etc|cf|ex)\b/gi, '$1.');
-        
         return text;
     }
 
-    // 🔥 NOUVELLE MÉTHODE : Capitalisation intelligente
     improveCapitalization(text) {
-        // Première lettre de phrase
         text = text.charAt(0).toUpperCase() + text.slice(1);
-        
-        // Après les points
-        text = text.replace(/\.\s+([a-z])/g, '. $1'.toUpperCase());
-        
-        // Mots toujours en majuscules
+        text = text.replace(/\.\s+([a-z])/g, (match, p1) => '. ' + p1.toUpperCase());
+
         const alwaysCapital = ['API', 'KPI', 'ROI', 'PDF', 'URL', 'SEO', 'CRM', 'ERP', 'CDI', 'CDD', 'RH'];
         alwaysCapital.forEach(word => {
             const regex = new RegExp(`\\b${word.toLowerCase()}\\b`, 'gi');
             text = text.replace(regex, word);
         });
-        
-        // Noms propres courants (vous pouvez ajouter votre entreprise, vos clients, etc.)
-        const properNouns = ['Google', 'Microsoft', 'Apple', 'Adobe', 'Salesforce', 'LinkedIn'];
-        properNouns.forEach(name => {
-            const regex = new RegExp(`\\b${name.toLowerCase()}\\b`, 'gi');
-            text = text.replace(regex, name);
-        });
-        
+
         return text;
     }
 
-    // 🔥 MÉTHODE AMÉLIORÉE : Génération de résumé plus intelligente
+    // 🔥 NOUVELLE VERSION : Génération de résumé avec formatage parfait
     generateSummary() {
         const sentences = this.transcriptionText.split(/[.!?]+/).filter(s => s.trim().length > 10);
-        const paragraphs = this.analyzeText(sentences);
-        
-        let summary = '📋 **RÉSUMÉ DE RÉUNION**\n\n';
-        
-        if (paragraphs.keyPoints.length > 0) {
-            summary += '🎯 **POINTS CLÉS :**\n';
-            paragraphs.keyPoints.forEach(point => {
-                summary += `• ${point.trim()}\n`;
+        if (sentences.length === 0) return;
+
+        const analysis = this.analyzeTextForSummary(sentences);
+        const currentDate = new Date().toLocaleDateString('fr-FR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
+        // 🎯 RÉSUMÉ HTML AVEC FORMATAGE PROFESSIONNEL
+        let summaryHTML = `<div class="summary-header">
+            <div class="summary-title">RÉSUMÉ DE RÉUNION</div>
+            <div class="summary-date">${currentDate}</div>
+        </div>`;
+
+        // Section Points Essentiels
+        if (analysis.keyPoints.length > 0) {
+            summaryHTML += `<div class="summary-section">
+                <div class="summary-section-title">🎯 POINTS ESSENTIELS</div>`;
+            analysis.keyPoints.slice(0, 3).forEach(point => {
+                const cleanPoint = this.condenseSentence(point);
+                summaryHTML += `<div class="summary-item">${cleanPoint}</div>`;
             });
-            summary += '\n';
+            summaryHTML += `</div>`;
         }
-        
-        if (paragraphs.actions.length > 0) {
-            summary += '✅ **ACTIONS À FAIRE :**\n';
-            paragraphs.actions.forEach(action => {
-                summary += `• ${action.trim()}\n`;
+
+        // Section Actions Prioritaires
+        if (analysis.actions.length > 0) {
+            summaryHTML += `<div class="summary-section">
+                <div class="summary-section-title">✅ ACTIONS PRIORITAIRES</div>`;
+            analysis.actions.slice(0, 4).forEach(action => {
+                const cleanAction = this.condenseSentence(action);
+                summaryHTML += `<div class="summary-item">${cleanAction}</div>`;
             });
-            summary += '\n';
+            summaryHTML += `</div>`;
         }
-        
-        if (paragraphs.decisions.length > 0) {
-            summary += '🎯 **DÉCISIONS PRISES :**\n';
-            paragraphs.decisions.forEach(decision => {
-                summary += `• ${decision.trim()}\n`;
+
+        // Section Décisions
+        if (analysis.decisions.length > 0) {
+            summaryHTML += `<div class="summary-section">
+                <div class="summary-section-title">🎯 DÉCISIONS PRISES</div>`;
+            analysis.decisions.slice(0, 3).forEach(decision => {
+                const cleanDecision = this.condenseSentence(decision);
+                summaryHTML += `<div class="summary-item">${cleanDecision}</div>`;
             });
-            summary += '\n';
+            summaryHTML += `</div>`;
         }
-        
-        if (paragraphs.questions.length > 0) {
-            summary += '❓ **QUESTIONS/POINTS EN SUSPENS :**\n';
-            paragraphs.questions.forEach(question => {
-                summary += `• ${question.trim()}\n`;
+
+        // Section Points en Suspens
+        if (analysis.questions.length > 0) {
+            summaryHTML += `<div class="summary-section">
+                <div class="summary-section-title">❓ POINTS EN SUSPENS</div>`;
+            analysis.questions.slice(0, 3).forEach(question => {
+                const cleanQuestion = this.condenseSentence(question);
+                summaryHTML += `<div class="summary-item">${cleanQuestion}</div>`;
             });
+            summaryHTML += `</div>`;
         }
-        
-        this.summaryDiv.innerHTML = summary.replace(/\n/g, '<br>');
+
+        // Synthèse finale si nécessaire
+        if (analysis.totalPoints > 8) {
+            const keyInsight = this.extractKeyInsight(sentences);
+            if (keyInsight) {
+                summaryHTML += `<div class="summary-section">
+                    <div class="summary-section-title">💡 SYNTHÈSE GÉNÉRALE</div>
+                    <div class="summary-item summary-highlight">${keyInsight}</div>
+                </div>`;
+            }
+        }
+
+        this.summaryDiv.innerHTML = summaryHTML;
     }
 
-    // 🔥 NOUVELLE MÉTHODE : Analyse intelligente du texte
-    analyzeText(sentences) {
-        const result = {
-            keyPoints: [],
-            actions: [],
-            decisions: [],
-            questions: []
+    analyzeTextForSummary(sentences) {
+        const result = { keyPoints: [], actions: [], decisions: [], questions: [], totalPoints: 0 };
+
+        const actionTriggers = {
+            'il faut': 3, 'nous devons': 3, 'il faudra': 3, 'action': 2,
+            'faire': 1, 'créer': 2, 'envoyer': 1, 'préparer': 2,
+            'organiser': 2, 'contacter': 1, 'planifier': 2, 'livrer': 3
         };
-        
-        const actionTriggers = ['il faut', 'nous devons', 'il faudra', 'action', 'faire', 'créer', 'envoyer', 'préparer', 'organiser', 'contacter', 'planifier'];
-        const decisionTriggers = ['décision', 'décidé', 'choix', 'retenu', 'validé', 'approuvé'];
-        const questionTriggers = ['question', 'problème', 'comment', 'pourquoi', 'quand', 'qui', 'où'];
-        const importantTriggers = ['important', 'essentiel', 'critique', 'urgent', 'priorité', 'objectif', 'budget', 'deadline', 'livrable'];
-        
+
+        const decisionTriggers = {
+            'décision': 3, 'décidé': 3, 'choix': 2, 'retenu': 2,
+            'validé': 3, 'approuvé': 3, 'choisi': 2, 'opté': 2
+        };
+
+        const questionTriggers = {
+            'question': 2, 'problème': 3, 'comment': 1, 'pourquoi': 1,
+            'reste à': 2, 'à clarifier': 3, 'à voir': 2
+        };
+
+        const importantTriggers = {
+            'important': 3, 'essentiel': 3, 'critique': 3, 'urgent': 3,
+            'priorité': 3, 'objectif': 2, 'budget': 2, 'deadline': 3
+        };
+
         sentences.forEach(sentence => {
-            const lowerSentence = sentence.toLowerCase();
-            
-            // Classification des phrases
-            if (actionTriggers.some(trigger => lowerSentence.includes(trigger))) {
-                result.actions.push(sentence);
-            } else if (decisionTriggers.some(trigger => lowerSentence.includes(trigger))) {
-                result.decisions.push(sentence);
-            } else if (questionTriggers.some(trigger => lowerSentence.includes(trigger))) {
-                result.questions.push(sentence);
-            } else if (importantTriggers.some(trigger => lowerSentence.includes(trigger)) || sentence.length > 50) {
-                result.keyPoints.push(sentence);
+            const lowerSentence = sentence.toLowerCase().trim();
+            if (lowerSentence.length < 15) return;
+
+            let maxScore = 0;
+            let category = null;
+
+            const actionScore = this.calculateScore(lowerSentence, actionTriggers);
+            const decisionScore = this.calculateScore(lowerSentence, decisionTriggers);
+            const questionScore = this.calculateScore(lowerSentence, questionTriggers);
+            const importantScore = this.calculateScore(lowerSentence, importantTriggers);
+
+            if (actionScore > maxScore) { maxScore = actionScore; category = 'actions'; }
+            if (decisionScore > maxScore) { maxScore = decisionScore; category = 'decisions'; }
+            if (questionScore > maxScore) { maxScore = questionScore; category = 'questions'; }
+            if (importantScore > maxScore) { maxScore = importantScore; category = 'keyPoints'; }
+
+            if (maxScore >= 2) {
+                result[category].push({ sentence: sentence.trim(), score: maxScore });
+            } else if (sentence.length > 80) {
+                result.keyPoints.push({ sentence: sentence.trim(), score: 1 });
             }
         });
-        
+
+        // Tri et nettoyage
+        Object.keys(result).forEach(key => {
+            if (Array.isArray(result[key])) {
+                result[key] = result[key]
+                    .sort((a, b) => b.score - a.score)
+                    .map(item => item.sentence)
+                    .filter((sentence, index, array) => 
+                        !array.slice(0, index).some(prev => 
+                            this.sentenceSimilarity(sentence, prev) > 0.7
+                        )
+                    );
+            }
+        });
+
+        result.totalPoints = result.keyPoints.length + result.actions.length + 
+                           result.decisions.length + result.questions.length;
+
         return result;
+    }
+
+    calculateScore(sentence, triggers) {
+        let score = 0;
+        Object.entries(triggers).forEach(([trigger, weight]) => {
+            if (sentence.includes(trigger)) score += weight;
+        });
+        return score;
+    }
+
+    condenseSentence(sentence) {
+        let condensed = sentence.trim();
+
+        const redundantPhrases = [
+            'je pense que', 'il me semble que', 'à mon avis',
+            'en fait', 'du coup', 'donc voilà', 'bon ben'
+        ];
+
+        redundantPhrases.forEach(phrase => {
+            condensed = condensed.replace(new RegExp(phrase, 'gi'), '');
+        });
+
+        const shortenings = {
+            'il faut que nous': 'nous devons',
+            'il va falloir que': 'il faut',
+            'nous allons devoir': 'nous devons'
+        };
+
+        Object.entries(shortenings).forEach(([long, short]) => {
+            condensed = condensed.replace(new RegExp(long, 'gi'), short);
+        });
+
+        if (condensed.length > 120) {
+            condensed = condensed.substring(0, 117) + '...';
+        }
+
+        return condensed.trim();
+    }
+
+    extractKeyInsight(sentences) {
+        const insights = sentences.filter(s => {
+            const lower = s.toLowerCase();
+            return (lower.includes('résultat') || lower.includes('conclusion') || 
+                   lower.includes('important') || lower.includes('essentiel')) && 
+                   s.length > 50;
+        });
+
+        return insights.length > 0 ? this.condenseSentence(insights[0]) : null;
+    }
+
+    sentenceSimilarity(sentence1, sentence2) {
+        const words1 = sentence1.toLowerCase().split(' ');
+        const words2 = sentence2.toLowerCase().split(' ');
+        const commonWords = words1.filter(word => words2.includes(word));
+
+        return commonWords.length / Math.max(words1.length, words2.length);
     }
 
     async bindEvents() {
@@ -353,7 +425,6 @@ class TranscripteurReunion {
 
     async startRecording() {
         try {
-            // Configuration audio optimisée
             const constraints = {
                 audio: {
                     echoCancellation: true,
@@ -362,34 +433,34 @@ class TranscripteurReunion {
                     sampleRate: 16000
                 }
             };
-            
+
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            
+
             this.mediaRecorder = new MediaRecorder(stream, {
                 mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
                     ? 'audio/webm;codecs=opus' 
                     : 'audio/webm'
             });
-            
+
             this.audioChunks = [];
-            
+
             this.mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                     this.audioChunks.push(event.data);
                 }
             };
-            
-            this.mediaRecorder.start(1000); // Enregistrement par chunks de 1s pour de meilleures performances
+
+            this.mediaRecorder.start(1000);
             this.recognition.start();
-            
+
             this.isRecording = true;
             this.startTime = Date.now();
             this.startTimer();
-            
+
             this.startBtn.disabled = true;
             this.stopBtn.disabled = false;
             this.statusText.textContent = '🔴 Enregistrement en cours - Qualité optimisée';
-            
+
         } catch (error) {
             console.error('Erreur démarrage:', error);
             alert('Erreur: Impossible d\'accéder au microphone');
@@ -400,43 +471,35 @@ class TranscripteurReunion {
         if (this.mediaRecorder && this.isRecording) {
             this.mediaRecorder.stop();
             this.recognition.stop();
-            
+
             this.isRecording = false;
             this.stopTimer();
-            
-            // Post-processing final de toute la transcription
+
             this.transcriptionText = this.finalPostProcessing(this.transcriptionText);
             this.updateTranscription();
             this.generateSummary();
-            
+
             this.startBtn.disabled = false;
             this.stopBtn.disabled = true;
             this.statusText.textContent = '✅ Enregistrement terminé - Transcription optimisée';
         }
     }
 
-    // 🔥 NOUVELLE MÉTHODE : Post-processing final
     finalPostProcessing(text) {
-        // Suppression des répétitions
         text = this.removeRepetitions(text);
-        
-        // Amélioration de la structure des phrases
         text = this.improveStructure(text);
-        
         return text.trim();
     }
 
     removeRepetitions(text) {
-        // Supprime les mots répétés consécutivement
         return text.replace(/\b(\w+)(?:\s+\1\b)+/gi, '$1');
     }
 
     improveStructure(text) {
-        // Améliore la structure générale du texte
         return text
-            .replace(/\s*\.\s*\./g, '.') // Double points
-            .replace(/\s+/g, ' ') // Espaces multiples
-            .replace(/\.\s*([a-z])/g, (match, p1) => '. ' + p1.toUpperCase()); // Majuscule après point
+            .replace(/\s*\.\s*\./g, '.')
+            .replace(/\s+/g, ' ')
+            .replace(/\.\s*([a-z])/g, (match, p1) => '. ' + p1.toUpperCase());
     }
 
     startTimer() {
@@ -457,7 +520,7 @@ class TranscripteurReunion {
     }
 
     updateTranscription() {
-        this.transcriptionDiv.innerHTML = this.transcriptionText.replace(/\n/g, '<br>');
+        this.transcriptionDiv.innerHTML = this.formatTranscriptionForDisplay(this.transcriptionText);
     }
 
     clearAll() {
@@ -474,7 +537,7 @@ class TranscripteurReunion {
 
     downloadFile(type) {
         const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-        
+
         switch(type) {
             case 'audio':
                 if (this.audioChunks.length > 0) {
@@ -482,31 +545,115 @@ class TranscripteurReunion {
                     this.downloadBlob(audioBlob, `reunion-audio-${timestamp}.webm`);
                 }
                 break;
-                
+
             case 'transcript':
-                const transcriptText = this.transcriptionDiv.textContent || this.transcriptionText;
+                const transcriptText = this.formatTranscriptionForDownload(this.transcriptionText);
                 const transcriptBlob = new Blob([transcriptText], { type: 'text/plain;charset=utf-8' });
-                this.downloadBlob(transcriptBlob, `transcription-optimisee-${timestamp}.txt`);
+                this.downloadBlob(transcriptBlob, `transcription-formatee-${timestamp}.txt`);
                 break;
-                
+
             case 'summary':
-                const summaryText = this.summaryDiv.textContent;
+                const summaryHTML = this.summaryDiv.innerHTML;
+                const summaryText = this.convertSummaryToFormattedText(summaryHTML);
                 const summaryBlob = new Blob([summaryText], { type: 'text/plain;charset=utf-8' });
-                this.downloadBlob(summaryBlob, `resume-intelligent-${timestamp}.txt`);
+                this.downloadBlob(summaryBlob, `resume-professionnel-${timestamp}.txt`);
                 break;
-                
+
             case 'all':
                 this.downloadAll(timestamp);
                 break;
         }
     }
 
+    // 🔥 NOUVEAU : Formatage de la transcription pour téléchargement
+    formatTranscriptionForDownload(text) {
+        if (!text) return 'Aucune transcription disponible.';
+
+        const currentDate = new Date().toLocaleDateString('fr-FR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
+        const sentences = text.split(/(?<=[.!?])\s+/);
+        let formatted = `TRANSCRIPTION DE RÉUNION\n${currentDate}\n\n`;
+        formatted += '=' .repeat(50) + '\n\n';
+
+        let paragraphSentences = [];
+        
+        sentences.forEach((sentence, index) => {
+            if (sentence.trim()) {
+                paragraphSentences.push(sentence.trim());
+                
+                // Nouveau paragraphe tous les 3-4 phrases ou sur mots-clés
+                if (paragraphSentences.length >= 4 || 
+                    sentence.toLowerCase().includes('maintenant') ||
+                    sentence.toLowerCase().includes('ensuite') ||
+                    sentence.toLowerCase().includes('d\'autre part')) {
+                    
+                    formatted += paragraphSentences.join(' ') + '\n\n';
+                    paragraphSentences = [];
+                }
+            }
+        });
+
+        // Ajout des phrases restantes
+        if (paragraphSentences.length > 0) {
+            formatted += paragraphSentences.join(' ') + '\n\n';
+        }
+
+        formatted += '=' .repeat(50) + '\n';
+        formatted += `Fin de la transcription - ${new Date().toLocaleTimeString('fr-FR')}`;
+
+        return formatted;
+    }
+
+    // 🔥 NOUVEAU : Conversion HTML du résumé vers texte formaté professionnel
+    convertSummaryToFormattedText(htmlContent) {
+        if (!htmlContent) return 'Aucun résumé disponible.';
+
+        let textContent = htmlContent;
+
+        // Remplacement des balises par formatage texte professionnel
+        textContent = textContent
+            // En-tête principal
+            .replace(/<div class="summary-header">[\s\S]*?<div class="summary-title">(.*?)<\/div>[\s\S]*?<div class="summary-date">(.*?)<\/div>[\s\S]*?<\/div>/g, 
+                '$1\n$2\n\n' + '='.repeat(60) + '\n')
+            
+            // Sections principales
+            .replace(/<div class="summary-section-title">(.*?)<\/div>/g, '\n\n$1\n' + '-'.repeat(30))
+            
+            // Items avec puces
+            .replace(/<div class="summary-item">(.*?)<\/div>/g, '\n  • $1')
+            
+            // Highlights
+            .replace(/<div class="summary-item summary-highlight">(.*?)<\/div>/g, '\n  ★ $1')
+            
+            // Nettoyage des balises restantes
+            .replace(/<div class="summary-section">/g, '')
+            .replace(/<\/div>/g, '')
+            .replace(/<br>/g, '\n')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        // Formatage final
+        textContent = textContent
+            .replace(/\n\s*\n\s*\n/g, '\n\n') // Triple saut = double saut
+            .replace(/^\n+/, '') // Suppression sauts début
+            .replace(/\n+$/, '') // Suppression sauts fin
+            + '\n\n' + '='.repeat(60) + '\n'
+            + `Résumé généré le ${new Date().toLocaleString('fr-FR')}`;
+
+        return textContent;
+    }
+
     downloadAll(timestamp) {
         if (this.audioChunks.length > 0) {
             setTimeout(() => this.downloadFile('audio'), 100);
         }
-        setTimeout(() => this.downloadFile('transcript'), 200);
-        setTimeout(() => this.downloadFile('summary'), 300);
+        setTimeout(() => this.downloadFile('transcript'), 300);
+        setTimeout(() => this.downloadFile('summary'), 500);
     }
 
     downloadBlob(blob, filename) {
@@ -514,6 +661,7 @@ class TranscripteurReunion {
         const a = document.createElement('a');
         a.href = url;
         a.download = filename;
+        a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

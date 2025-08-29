@@ -17,12 +17,16 @@ body {
     padding: 20px;
     background: white;
     min-height: 100vh;
+    box-shadow: 0 0 20px rgba(0,0,0,0.1);
 }
 
 h1 {
     text-align: center;
     margin-bottom: 30px;
     color: #2c3e50;
+    font-size: 2.5rem;
+    font-weight: 300;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .controls {
@@ -39,12 +43,16 @@ h1 {
     border-radius: 8px;
     cursor: pointer;
     font-size: 16px;
+    font-weight: 500;
     transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .btn.primary {
     background: #3498db;
     color: white;
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
 }
 
 .btn.secondary {
@@ -58,30 +66,42 @@ h1 {
 }
 
 .btn:hover {
-    opacity: 0.8;
+    opacity: 0.9;
     transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
 }
 
 .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
+    box-shadow: none;
 }
 
 .status {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #ecf0f1;
-    padding: 15px;
-    border-radius: 8px;
+    background: linear-gradient(135deg, #ecf0f1, #d5dbdb);
+    padding: 20px;
+    border-radius: 10px;
     margin-bottom: 20px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#statusText {
+    font-weight: 500;
+    color: #2c3e50;
 }
 
 #timer {
     font-weight: bold;
-    font-size: 18px;
+    font-size: 20px;
     color: #e74c3c;
+    background: rgba(255,255,255,0.8);
+    padding: 5px 15px;
+    border-radius: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .content {
@@ -95,30 +115,63 @@ h1 {
     .content {
         grid-template-columns: 1fr;
     }
+    
+    h1 {
+        font-size: 2rem;
+    }
+    
+    .controls {
+        gap: 8px;
+    }
+    
+    .btn {
+        padding: 10px 18px;
+        font-size: 14px;
+    }
 }
 
 .section {
-    background: #f8f9fa;
-    padding: 20px;
-    border-radius: 8px;
+    background: linear-gradient(135deg, #f8f9fa, #ffffff);
+    padding: 25px;
+    border-radius: 12px;
     border: 2px solid #e9ecef;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    transition: all 0.3s ease;
+}
+
+.section:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1);
 }
 
 .section h3 {
-    margin-bottom: 15px;
+    margin-bottom: 20px;
     color: #2c3e50;
+    font-size: 1.2rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 #transcription, #summary {
-    min-height: 300px;
+    min-height: 350px;
     background: white;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 15px;
-    font-size: 14px;
-    line-height: 1.5;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    padding: 20px;
+    font-size: 15px;
+    line-height: 1.7;
     overflow-y: auto;
     white-space: pre-wrap;
+    transition: all 0.3s ease;
+    font-family: 'Georgia', serif;
+}
+
+#transcription:focus, #summary:focus {
+    border-color: #3498db;
+    outline: none;
+    box-shadow: 0 0 15px rgba(52, 152, 219, 0.2);
 }
 
 #transcription:empty:before,
@@ -126,27 +179,267 @@ h1 {
     content: attr(placeholder);
     color: #999;
     font-style: italic;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
 }
 
 .interim {
-    color: #999;
+    color: #3498db;
     font-style: italic;
+    background: rgba(52, 152, 219, 0.1);
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+/* 🔥 STYLES AVANCÉS POUR LE RÉSUMÉ FORMATÉ */
+#summary .summary-header {
+    text-align: center;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 3px solid #3498db;
+}
+
+#summary .summary-title {
+    font-weight: bold;
+    font-size: 20px;
+    color: #2c3e50;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+#summary .summary-date {
+    color: #7f8c8d;
+    font-style: italic;
+    font-size: 14px;
+}
+
+#summary .summary-section {
+    margin-bottom: 20px;
+    background: rgba(52, 152, 219, 0.02);
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #3498db;
+}
+
+#summary .summary-section-title {
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 12px;
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#summary .summary-item {
+    margin: 8px 0;
+    padding-left: 20px;
+    position: relative;
+    line-height: 1.6;
+    color: #34495e;
+}
+
+#summary .summary-item:before {
+    content: "●";
+    position: absolute;
+    left: 0;
+    color: #3498db;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+#summary .summary-highlight {
+    background: linear-gradient(120deg, #fff3cd, #ffeaa7);
+    padding: 8px 12px;
+    border-radius: 6px;
+    color: #856404;
+    font-weight: 600;
+    border: 1px solid #ffeaa7;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+#summary .summary-highlight:before {
+    content: "★";
+    color: #f39c12;
 }
 
 .downloads {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     justify-content: center;
     flex-wrap: wrap;
-    padding-top: 20px;
-    border-top: 2px solid #eee;
+    padding-top: 25px;
+    border-top: 3px solid #ecf0f1;
+    margin-top: 20px;
 }
 
 .downloads .btn {
-    background: #34495e;
+    background: linear-gradient(135deg, #34495e, #2c3e50);
     color: white;
+    font-size: 14px;
+    padding: 12px 20px;
+    position: relative;
+    overflow: hidden;
+}
+
+.downloads .btn:before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s;
+}
+
+.downloads .btn:hover:before {
+    left: 100%;
 }
 
 .downloads .btn.primary {
-    background: #2ecc71;
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+    font-weight: bold;
+    transform: scale(1.05);
+}
+
+.downloads .btn.primary:hover {
+    transform: scale(1.1) translateY(-2px);
+    box-shadow: 0 8px 25px rgba(46, 204, 113, 0.3);
+}
+
+/* Animations et transitions fluides */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.section {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+/* Scrollbar personnalisée */
+#transcription::-webkit-scrollbar,
+#summary::-webkit-scrollbar {
+    width: 8px;
+}
+
+#transcription::-webkit-scrollbar-track,
+#summary::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 6px;
+}
+
+#transcription::-webkit-scrollbar-thumb,
+#summary::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    border-radius: 6px;
+}
+
+#transcription::-webkit-scrollbar-thumb:hover,
+#summary::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #2980b9, #1abc9c);
+}
+
+/* Responsive amélioré */
+@media (max-width: 480px) {
+    .container {
+        padding: 15px;
+        margin: 0;
+    }
+    
+    .section {
+        padding: 15px;
+    }
+    
+    #transcription, #summary {
+        min-height: 250px;
+        padding: 15px;
+        font-size: 14px;
+    }
+    
+    .downloads {
+        gap: 8px;
+    }
+    
+    .downloads .btn {
+        padding: 10px 15px;
+        font-size: 12px;
+    }
+    
+    #summary .summary-title {
+        font-size: 18px;
+    }
+    
+    #summary .summary-section-title {
+        font-size: 14px;
+    }
+}
+
+/* États visuels pour l'enregistrement */
+.recording #transcription {
+    border-color: #e74c3c;
+    box-shadow: 0 0 15px rgba(231, 76, 60, 0.2);
+}
+
+.recording .status {
+    background: linear-gradient(135deg, #fee, #fcc);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.8; }
+    100% { opacity: 1; }
+}
+
+/* Améliorations typographiques pour la lecture */
+#transcription p, #summary p {
+    margin-bottom: 15px;
+}
+
+#transcription strong, #summary strong {
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+#transcription em, #summary em {
+    color: #7f8c8d;
+    font-style: italic;
+}
+
+/* Optimisation de l'impression */
+@media print {
+    .controls, .downloads, .status {
+        display: none;
+    }
+    
+    .container {
+        box-shadow: none;
+        padding: 0;
+    }
+    
+    .content {
+        grid-template-columns: 1fr;
+        gap: 30px;
+    }
+    
+    .section {
+        box-shadow: none;
+        border: 1px solid #ddd;
+        break-inside: avoid;
+    }
+    
+    #summary {
+        font-size: 12px;
+        line-height: 1.4;
+    }
 }
