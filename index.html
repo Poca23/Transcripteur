@@ -7,17 +7,21 @@
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#007bff">
-    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="apple-touch-icon" href="./assets/icon-192.png">
     <script>
     if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js');
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(registration => console.log('SW registered'))
+                .catch(error => console.log('SW registration failed'));
+        });
     }
     </script>
 </head>
 <body>
     <div class="container">
         <h1>🎤 Transcripteur de Réunions</h1>
-        
+
         <div class="controls">
             <button id="startBtn" class="btn primary">Démarrer</button>
             <button id="stopBtn" class="btn secondary" disabled>Arrêter</button>
