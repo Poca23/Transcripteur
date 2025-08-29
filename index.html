@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transcripteur de Réunions</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Transcripteur de Réunions</h1>
+        
+        <div class="controls">
+            <button id="startBtn" class="btn primary">Démarrer</button>
+            <button id="stopBtn" class="btn secondary" disabled>Arrêter</button>
+            <button id="clearBtn" class="btn danger">Effacer</button>
+        </div>
+
+        <div class="status">
+            <span id="statusText">Prêt à enregistrer</span>
+            <div id="timer">00:00</div>
+        </div>
+
+        <div class="content">
+            <div class="section">
+                <h3>📝 Transcription en temps réel</h3>
+                <div id="transcription" contenteditable="true" placeholder="La transcription apparaîtra ici..."></div>
+            </div>
+
+            <div class="section">
+                <h3>📋 Résumé automatique</h3>
+                <div id="summary" contenteditable="true" placeholder="Le résumé sera généré ici..."></div>
+            </div>
+        </div>
+
+        <div class="downloads">
+            <button id="downloadAudio" class="btn">⬇️ Audio</button>
+            <button id="downloadTranscript" class="btn">⬇️ Transcription</button>
+            <button id="downloadSummary" class="btn">⬇️ Résumé</button>
+            <button id="downloadAll" class="btn primary">⬇️ Tout télécharger</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
