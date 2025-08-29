@@ -8,6 +8,12 @@ class TranscripteurReunion {
         this.isRecording = false;
         this.startTime = null;
         this.timer = null;
+        this.audioStream = null; // 🔥 NOUVEAU : Stream audio
+        
+        // Détection mobile et PWA
+        this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        this.isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                           window.navigator.standalone === true;
         
         // 🔥 NOUVEAU : Gestion des pauses
         this.lastSpeechTime = null;
@@ -21,6 +27,9 @@ class TranscripteurReunion {
         this.initElements();
         this.initSpeechRecognition();
         this.bindEvents();
+        
+        // 🔥 NOUVEAU : Affichage info PWA mobile
+        this.showMobileInfo();
     }
 
     initCorrectionDictionaries() {
@@ -58,20 +67,6 @@ class TranscripteurReunion {
             'euh', 'heu', 'hem', 'bon', 'voilà', 'donc euh', 'en fait', 'du coup',
             'genre', 'quoi', 'hein', 'bon ben', 'alors euh', 'et puis euh'
         ];
-
-        // 🔥 NOUVEAU : Mots-clés pour sous-titres automatiques
-        this.subtitleKeywords = {
-            'budget': ['Budget', 'Finances', 'Économie'],
-            'planning': ['Planning', 'Organisation', 'Calendrier'],
-            'objectif': ['Objectifs', 'Cibles', 'Ambitions'],
-            'problème': ['Problématiques', 'Difficultés', 'Enjeux'],
-            'solution': ['Solutions', 'Propositions', 'Résolutions'],
-            'équipe': ['Équipe', 'Ressources', 'Personnel'],
-            'client': ['Clients', 'Relations', 'Commercial'],
-            'projet': ['Projet', 'Développement', 'Réalisation'],
-            'décision': ['Décisions', 'Choix', 'Validations'],
-            'action': ['Actions', 'Tâches', 'Missions']
-        };
     }
 
     initElements() {
@@ -96,82 +91,250 @@ class TranscripteurReunion {
             this.recognition.continuous = true;
             this.recognition.interimResults = true;
             this.recognition.lang = 'fr-FR';
-            this.recognition.maxAlternatives = 3;
+            this.recognition.maxAlternatives = 1; // 🔥 CHANGÉ : Plus simple pour mobile
 
-            this.recognition.onend = () => {
-                if (this.isRecording) {
-                    setTimeout(() => {
-                        if (this.isRecording) {
-                            this.recognition.start();
-                        }
-                    }, 100);
-                }
+            // 🔥 NOUVEAU : Configuration optimisée mobile/PWA
+            if (this.isMobile) {
+                // Paramètres spécifiques mobile
+                this.recognition.interimResults = false; // Plus stable sur mobile
+            }
+
+            let finalTranscript = '';
+
+            this.recognition.onstart = () => {
+                console.log('🎤 Reconnaissance vocale démarrée');
+                this.statusText.textContent = '🎤 Écoute en cours...';
+                this.lastSpeechTime = Date.now();
             };
 
-            // 🔥 NOUVEAU : Gestion des pauses et sauts de ligne
             this.recognition.onresult = (event) => {
                 this.lastSpeechTime = Date.now();
                 
-                // Annuler le timeout de pause précédent
                 if (this.pauseTimeout) {
                     clearTimeout(this.pauseTimeout);
+                    this.pauseTimeout = null;
                 }
 
-                let finalTranscript = '';
                 let interimTranscript = '';
-
+                
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript;
-
                     if (event.results[i].isFinal) {
-                        const improvedText = this.improveTranscript(transcript);
-                        finalTranscript += improvedText + '. ';
-                        
-                        // 🔥 NOUVEAU : Stockage pour sous-titres
-                        this.transcriptionSegments.push({
-                            text: improvedText,
-                            timestamp: Date.now(),
-                            keywords: this.extractKeywords(improvedText)
-                        });
+                        const improvedText = this.quickImprove(transcript);
+                        finalTranscript += improvedText + ' ';
+                        this.transcriptionText = finalTranscript;
+                        this.updateTranscription();
+                        this.generateSummary();
+                        this.startPauseTimer();
                     } else {
-                        interimTranscript += this.quickImprove(transcript);
+                        interimTranscript += transcript;
                     }
                 }
-
-                if (finalTranscript) {
-                    this.rawTranscriptionText += finalTranscript;
-                    this.transcriptionText += finalTranscript;
-                    this.updateTranscription();
-                    this.generateSummary();
-
-                    // 🔥 Démarrer le timer pour détecter les pauses
-                    this.startPauseTimer();
+                
+                // Affichage en temps réel (seulement si pas mobile PWA)
+                if (!this.isMobile || !this.isStandalone) {
+                    this.transcriptionDiv.textContent = finalTranscript + interimTranscript;
                 }
-
-                this.transcriptionDiv.innerHTML = this.formatTranscriptionForDisplay(this.transcriptionText) + 
-                    '<span class="interim">' + interimTranscript + '</span>';
             };
 
             this.recognition.onerror = (event) => {
-                console.error('Erreur reconnaissance vocale:', event.error);
-                if (event.error === 'network') {
-                    this.statusText.textContent = '⚠️ Problème réseau - Reconnexion...';
+                console.error('❌ Erreur reconnaissance vocale:', event.error);
+                
+                if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                    this.statusText.textContent = '❌ Accès micro refusé';
+                    // 🔥 NOUVEAU : Tentative de récupération pour PWA mobile
+                    if (this.isStandalone && this.isMobile) {
+                        setTimeout(() => {
+                            this.requestMicrophonePermission();
+                        }, 2000);
+                    }
+                } else if (event.error === 'no-speech') {
+                    this.statusText.textContent = '⚠️ Aucune parole détectée';
+                    // Redémarrage automatique
+                    if (this.isRecording) {
+                        setTimeout(() => {
+                            this.restartRecognition();
+                        }, 1000);
+                    }
+                } else if (event.error === 'network') {
+                    this.statusText.textContent = '⚠️ Problème réseau - Mode local';
+                    // Continuer en mode local
+                } else {
+                    this.statusText.textContent = `⚠️ Erreur: ${event.error}`;
+                }
+            };
+
+            this.recognition.onend = () => {
+                console.log('🛑 Reconnaissance terminée');
+                if (this.isRecording) {
+                    // Redémarrage automatique
+                    setTimeout(() => {
+                        this.restartRecognition();
+                    }, 100);
                 }
             };
         } else {
-            alert('Votre navigateur ne supporte pas la reconnaissance vocale');
+            alert('❌ Votre navigateur ne supporte pas la reconnaissance vocale');
         }
+    }
+
+    // 🔥 NOUVEAU : Demande explicite permission micro
+    async requestMicrophonePermission() {
+        try {
+            console.log('🔄 Nouvelle tentative d\'accès micro...');
+            
+            // Fermer le précédent stream
+            if (this.audioStream) {
+                this.audioStream.getTracks().forEach(track => track.stop());
+                this.audioStream = null;
+            }
+
+            // Nouvelle demande avec contraintes optimales
+            this.audioStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                    sampleRate: 16000 // 🔥 Optimisé pour reconnaissance vocale
+                }
+            });
+
+            console.log('✅ Accès micro rétabli');
+            this.statusText.textContent = '✅ Micro reconnecté - Redémarrage...';
+            
+            // Redémarrer la reconnaissance
+            setTimeout(() => {
+                if (this.isRecording && this.recognition) {
+                    this.restartRecognition();
+                }
+            }, 500);
+
+        } catch (error) {
+            console.error('❌ Impossible d\'accéder au micro:', error);
+            this.statusText.textContent = '❌ Micro inaccessible';
+            
+            // 🔥 NOUVEAU : Instructions spécifiques PWA mobile
+            if (this.isStandalone && this.isMobile) {
+                this.showMobileTroubleshooting();
+            }
+        }
+    }
+
+    // 🔥 NOUVEAU : Redémarrage intelligent de la reconnaissance
+    restartRecognition() {
+        if (!this.recognition || !this.isRecording) return;
+
+        try {
+            this.recognition.stop();
+            setTimeout(() => {
+                if (this.isRecording) {
+                    this.recognition.start();
+                    console.log('🔄 Reconnaissance redémarrée');
+                }
+            }, 300);
+        } catch (error) {
+            console.log('⚠️ Erreur redémarrage:', error);
+            // Tentative après délai plus long
+            setTimeout(() => {
+                if (this.isRecording) {
+                    try {
+                        this.recognition.start();
+                    } catch (e) {
+                        console.log('❌ Impossible de redémarrer la reconnaissance');
+                        this.requestMicrophonePermission();
+                    }
+                }
+            }, 1500);
+        }
+    }
+
+    // 🔥 NOUVEAU : Affichage info PWA mobile
+    showMobileInfo() {
+        if (this.isMobile && this.isStandalone) {
+            const info = document.createElement('div');
+            info.style.cssText = `
+                background: linear-gradient(135deg, #fff3cd, #ffeaa7); 
+                border: 1px solid #f0ad4e; 
+                padding: 12px; 
+                margin: 15px 0; 
+                border-radius: 8px; 
+                font-size: 13px;
+                text-align: center;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            `;
+            info.innerHTML = '📱 <strong>PWA Mobile:</strong> Si le micro ne fonctionne pas, <a href="#" onclick="this.parentElement.nextElementSibling.style.display=\'block\';this.parentElement.style.display=\'none\'">voir solutions</a>';
+            
+            const solutions = document.createElement('div');
+            solutions.style.cssText = `
+                display: none;
+                background: #e8f4f8;
+                border: 1px solid #bee5eb;
+                padding: 15px;
+                margin: 10px 0;
+                border-radius: 8px;
+                font-size: 12px;
+            `;
+            solutions.innerHTML = `
+                <strong>🔧 Solutions micro PWA:</strong><br>
+                1️⃣ Redémarrer l'application<br>
+                2️⃣ Ouvrir dans le navigateur<br>
+                3️⃣ Vérifier permissions dans Paramètres<br>
+                4️⃣ Activer le micro dans les paramètres système
+            `;
+            
+            const container = document.querySelector('.container');
+            container.insertBefore(info, document.querySelector('.controls'));
+            container.insertBefore(solutions, document.querySelector('.controls'));
+        }
+    }
+
+    // 🔥 NOUVEAU : Dépannage mobile
+    showMobileTroubleshooting() {
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8); z-index: 10000;
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+        `;
+        
+        modal.innerHTML = `
+            <div style="background: white; padding: 25px; border-radius: 12px; max-width: 350px; text-align: center;">
+                <h3 style="color: #e74c3c; margin-top: 0;">🎤 Problème Microphone</h3>
+                <p><strong>Solutions PWA Mobile:</strong></p>
+                <div style="text-align: left; margin: 15px 0;">
+                    <p>📱 <strong>Méthode 1:</strong> Fermer et relancer l'app</p>
+                    <p>🌐 <strong>Méthode 2:</strong> Ouvrir dans le navigateur</p>
+                    <p>⚙️ <strong>Méthode 3:</strong> Paramètres téléphone → Apps → Transcripteur → Permissions → Microphone</p>
+                </div>
+                <button onclick="this.parentElement.parentElement.remove()" 
+                        style="background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 6px;">
+                    Compris
+                </button>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
     }
 
     // 🔥 NOUVEAU : Gestion des pauses avec saut de ligne automatique
     startPauseTimer() {
+        if (this.pauseTimeout) {
+            clearTimeout(this.pauseTimeout);
+        }
+        
         this.pauseTimeout = setTimeout(() => {
             if (this.isRecording) {
                 this.transcriptionText += '\n\n';
                 this.updateTranscription();
-                console.log('Pause détectée - Saut de ligne ajouté');
+                console.log('⏸️ Pause détectée - Saut de ligne ajouté');
             }
         }, this.pauseThreshold);
+    }
+
+    updateTranscription() {
+        this.transcriptionDiv.innerHTML = this.formatTranscriptionForDisplay(this.transcriptionText);
+        this.transcriptionDiv.scrollTop = this.transcriptionDiv.scrollHeight;
     }
 
     // 🔥 NOUVEAU : Extraction des mots-clés pour sous-titres
@@ -192,48 +355,12 @@ class TranscripteurReunion {
     generateSubtitle(segment) {
         const keywords = segment.keywords;
         if (keywords.length === 0) return 'Discussion Générale';
-
-        // Prioriser par ordre d'importance
-        const priorities = ['budget', 'objectif', 'projet', 'client', 'planning', 'équipe'];
-        for (let priority of priorities) {
-            if (keywords.includes(priority) && this.subtitleKeywords[priority]) {
-                return this.subtitleKeywords[priority][0];
-            }
-        }
-
-        // Fallback avec le premier mot-clé trouvé
-        const firstKeyword = keywords[0];
-        if (this.subtitleKeywords[firstKeyword]) {
-            return this.subtitleKeywords[firstKeyword][0];
-        }
-
-        return 'Points Importants';
-    }
-
-    // 🔥 NOUVEAU : Génération de sous-titre principal intelligent
-    generateMainSubtitle(analysis) {
-        const allSegments = this.transcriptionSegments;
-        const keywordCounts = {};
-
-        // Compter les occurrences des mots-clés
-        allSegments.forEach(segment => {
-            segment.keywords.forEach(keyword => {
-                keywordCounts[keyword] = (keywordCounts[keyword] || 0) + 1;
-            });
-        });
-
-        // Trouver le thème dominant
-        const sortedKeywords = Object.entries(keywordCounts)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 2);
-
-        if (sortedKeywords.length === 0) return 'Réunion de Travail';
-
-        const [dominantKeyword] = sortedKeywords[0];
-        if (this.subtitleKeywords[dominantKeyword]) {
-            return this.subtitleKeywords[dominantKeyword][0] + ' & Stratégie';
-        }
-
+        
+        if (keywords.some(k => ['budget', 'roi', 'revenus', 'coûts'].includes(k))) return 'Aspects Financiers';
+        if (keywords.some(k => ['planning', 'deadline', 'milestone'].includes(k))) return 'Planning & Échéances';
+        if (keywords.some(k => ['équipe', 'ressources', 'commercial'].includes(k))) return 'Ressources Humaines';
+        if (keywords.some(k => ['client', 'prospect', 'marketing'].includes(k))) return 'Commercial & Marketing';
+        
         return 'Points Stratégiques';
     }
 
@@ -313,248 +440,54 @@ class TranscripteurReunion {
         const sentences = this.transcriptionText.split(/[.!?]+/).filter(s => s.trim().length > 10);
         if (sentences.length === 0) return;
 
-        const analysis = this.analyzeTextForSummary(sentences);
-        const currentDate = new Date().toLocaleDateString('fr-FR', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
-
-        // 🔥 NOUVEAU : Génération de sous-titre principal intelligent
-        const mainSubtitle = this.generateMainSubtitle(analysis);
-
-        // 🎯 RÉSUMÉ HTML AVEC SOUS-TITRE DYNAMIQUE
-        let summaryHTML = `<div class="summary-header">
-            <div class="summary-title">RÉSUMÉ DE RÉUNION</div>
-            <div class="summary-subtitle">${mainSubtitle}</div>
-            <div class="summary-date">${currentDate}</div>
-        </div>`;
-
-        // Section Points Essentiels
-        if (analysis.keyPoints.length > 0) {
-            summaryHTML += `<div class="summary-section">
-                <div class="summary-section-title">🎯 POINTS ESSENTIELS</div>`;
-            analysis.keyPoints.slice(0, 3).forEach(point => {
-                const cleanPoint = this.ensureCompleteSentence(point);
-                summaryHTML += `<div class="summary-item">${cleanPoint}</div>`;
-            });
-            summaryHTML += `</div>`;
-        }
-
-        // Section Actions Prioritaires
-        if (analysis.actions.length > 0) {
-            summaryHTML += `<div class="summary-section">
-                <div class="summary-section-title">✅ ACTIONS PRIORITAIRES</div>`;
-            analysis.actions.slice(0, 4).forEach(action => {
-                const cleanAction = this.ensureCompleteSentence(action);
-                summaryHTML += `<div class="summary-item">${cleanAction}</div>`;
-            });
-            summaryHTML += `</div>`;
-        }
-
-        // Section Décisions
-        if (analysis.decisions.length > 0) {
-            summaryHTML += `<div class="summary-section">
-                <div class="summary-section-title">🎯 DÉCISIONS PRISES</div>`;
-            analysis.decisions.slice(0, 3).forEach(decision => {
-                const cleanDecision = this.ensureCompleteSentence(decision);
-                summaryHTML += `<div class="summary-item">${cleanDecision}</div>`;
-            });
-            summaryHTML += `</div>`;
-        }
-
-        // Section Questions
-        if (analysis.questions.length > 0) {
-            summaryHTML += `<div class="summary-section">
-                <div class="summary-section-title">❓ QUESTIONS EN SUSPENS</div>`;
-            analysis.questions.slice(0, 3).forEach(question => {
-                const cleanQuestion = this.ensureCompleteSentence(question);
-                summaryHTML += `<div class="summary-item">${cleanQuestion}</div>`;
-            });
-            summaryHTML += `</div>`;
-        }
-
-        // Insight principal si disponible
-        const keyInsight = this.extractKeyInsight(sentences);
-        if (keyInsight) {
-            summaryHTML += `<div class="summary-highlight">
-                ${this.ensureCompleteSentence(keyInsight)}
-            </div>`;
-        }
-
-        this.summaryDiv.innerHTML = summaryHTML;
-    }
-
-    // 🔥 NOUVEAU : Fonction pour s'assurer que les phrases sont complètes
-    ensureCompleteSentence(sentence) {
-        let cleaned = sentence.trim();
-        
-        // Supprimer les "..." en fin
-        cleaned = cleaned.replace(/\.\.\.+$/g, '');
-        
-        // Nettoyer les expressions redondantes
-        const redundantPhrases = [
-            'je pense que', 'il me semble que', 'à mon avis',
-            'en fait', 'du coup', 'donc voilà', 'bon ben'
-        ];
-
-        redundantPhrases.forEach(phrase => {
-            cleaned = cleaned.replace(new RegExp(`^${phrase}\\s+`, 'gi'), '');
-            cleaned = cleaned.replace(new RegExp(`\\s+${phrase}\\s+`, 'gi'), ' ');
-        });
-
-        // Raccourcir intelligemment les phrases trop longues sans couper
-        if (cleaned.length > 150) {
-            // Chercher une virgule ou un point-virgule proche de 120 caractères
-            const cutPoints = [',', ';', ' et ', ' mais ', ' car '];
-            let bestCut = -1;
-            
-            for (let cutPoint of cutPoints) {
-                const index = cleaned.lastIndexOf(cutPoint, 120);
-                if (index > 80) {
-                    bestCut = index + cutPoint.length;
-                    break;
-                }
-            }
-            
-            if (bestCut > 0) {
-                cleaned = cleaned.substring(0, bestCut).trim();
-            } else if (cleaned.length > 140) {
-                // En dernier recours, couper au mot le plus proche
-                const words = cleaned.substring(0, 120).split(' ');
-                words.pop(); // Supprimer le dernier mot potentiellement coupé
-                cleaned = words.join(' ');
-            }
-        }
-
-        // S'assurer que la phrase finit par un point
-        if (cleaned && !cleaned.match(/[.!?]$/)) {
-            cleaned += '.';
-        }
-
-        return cleaned;
-    }
-
-    analyzeTextForSummary(sentences) {
-        const result = {
-            keyPoints: [],
-            actions: [],
-            decisions: [],
-            questions: [],
-            totalPoints: 0
-        };
-
-        const actionTriggers = {
-            'il faut': 3, 'nous devons': 3, 'il faudra': 3, 'on doit': 3,
-            'action': 2, 'tâche': 2, 'faire': 1, 'réaliser': 2
-        };
-
-        const questionTriggers = {
-            'question': 3, 'problème': 2, 'comment': 2, 'pourquoi': 2,
-            'qu\'est-ce': 2, 'est-ce que': 2
-        };
-
-        const decisionTriggers = {
-            'décision': 3, 'choix': 2, 'opter': 2, 'retenir': 2,
-            'valider': 2, 'approuver': 2, 'décider': 3
-        };
+        const keywordCount = {};
+        const importantSentences = [];
 
         sentences.forEach(sentence => {
-            sentence = sentence.trim();
+            let score = 0;
             const lowerSentence = sentence.toLowerCase();
             
-            if (sentence.length < 15) return;
-
-            const actionScore = this.calculateScore(lowerSentence, actionTriggers);
-            const questionScore = this.calculateScore(lowerSentence, questionTriggers);
-            const decisionScore = this.calculateScore(lowerSentence, decisionTriggers);
-
-            // Calcul score importance basé sur mots-clés métier
-            let importantScore = 0;
             Object.entries(this.businessKeywords).forEach(([keyword, weight]) => {
                 if (lowerSentence.includes(keyword)) {
-                    importantScore += weight;
+                    score += weight;
+                    keywordCount[keyword] = (keywordCount[keyword] || 0) + 1;
                 }
             });
 
-            // Classification
-            let maxScore = Math.max(actionScore, questionScore, decisionScore, importantScore);
-            let category = 'keyPoints';
-
-            if (actionScore > maxScore * 0.8) category = 'actions';
-            if (decisionScore > maxScore * 0.8) category = 'decisions';
-            if (questionScore > maxScore * 0.8) category = 'questions';
-
-            if (maxScore >= 2) {
-                result[category].push({ sentence: sentence.trim(), score: maxScore });
-            } else if (sentence.length > 80) {
-                result.keyPoints.push({ sentence: sentence.trim(), score: 1 });
+            if (score >= 2) {
+                importantSentences.push({ sentence: sentence.trim(), score });
             }
         });
 
-        // Tri et nettoyage
-        Object.keys(result).forEach(key => {
-            if (Array.isArray(result[key])) {
-                result[key] = result[key]
-                    .sort((a, b) => b.score - a.score)
-                    .map(item => item.sentence)
-                    .filter((sentence, index, array) => 
-                        !array.slice(0, index).some(prev => 
-                            this.sentenceSimilarity(sentence, prev) > 0.7
-                        )
-                    );
-            }
-        });
+        importantSentences.sort((a, b) => b.score - a.score);
+        const topSentences = importantSentences.slice(0, 5);
 
-        result.totalPoints = result.keyPoints.length + result.actions.length + 
-                           result.decisions.length + result.questions.length;
-
-        return result;
-    }
-
-    calculateScore(sentence, triggers) {
-        let score = 0;
-        Object.entries(triggers).forEach(([trigger, weight]) => {
-            if (sentence.includes(trigger)) score += weight;
-        });
-        return score;
-    }
-
-    extractKeyInsight(sentences) {
-        const insights = sentences.filter(s => {
-            const lower = s.toLowerCase();
-            return (lower.includes('résultat') || lower.includes('conclusion') ||
-                   lower.includes('impact') || lower.includes('bilan') ||
-                   lower.includes('principal') || lower.includes('essentiel'));
-        });
-
-        if (insights.length > 0) {
-            return this.ensureCompleteSentence(insights[0]);
+        let summary = '<div class="summary-title">📋 Résumé Automatique</div>\n\n';
+        
+        if (Object.keys(keywordCount).length > 0) {
+            summary += '<div class="summary-subtitle">🎯 Mots-clés principaux</div>\n';
+            Object.entries(keywordCount)
+                .sort(([,a], [,b]) => b - a)
+                .slice(0, 6)
+                .forEach(([keyword, count]) => {
+                    summary += `<span class="keyword-tag">${keyword} (${count})</span> `;
+                });
+            summary += '\n\n';
         }
 
-        // Fallback: prendre la phrase la plus longue avec des mots-clés importants
-        const importantSentences = sentences.filter(s => {
-            const lower = s.toLowerCase();
-            return (lower.includes('objectif') || lower.includes('projet') ||
-                   lower.includes('équipe') || lower.includes('client'));
-        });
-
-        if (importantSentences.length > 0) {
-            const longest = importantSentences.reduce((a, b) => a.length > b.length ? a : b);
-            return this.ensureCompleteSentence(longest);
+        if (topSentences.length > 0) {
+            summary += '<div class="summary-subtitle">💡 Points Importants</div>\n';
+            topSentences.forEach((item, index) => {
+                summary += `${index + 1}. ${item.sentence}\n\n`;
+            });
         }
 
-        return null;
-    }
+        summary += '<div class="summary-subtitle">📊 Statistiques</div>\n';
+        summary += `• Nombre total de phrases : ${sentences.length}\n`;
+        summary += `• Points importants identifiés : ${topSentences.length}\n`;
+        summary += `• Durée : ${this.timerDisplay.textContent}\n`;
 
-    sentenceSimilarity(sentence1, sentence2) {
-        const words1 = sentence1.toLowerCase().split(' ').filter(w => w.length > 3);
-        const words2 = sentence2.toLowerCase().split(' ').filter(w => w.length > 3);
-        
-        if (words1.length === 0 || words2.length === 0) return 0;
-        
-        const intersection = words1.filter(word => words2.includes(word));
-        return intersection.length / Math.max(words1.length, words2.length);
+        this.summaryDiv.innerHTML = summary;
     }
 
     bindEvents() {
@@ -568,15 +501,36 @@ class TranscripteurReunion {
         this.downloadSummary.addEventListener('click', () => this.downloadFile('summary'));
         this.downloadAll.addEventListener('click', () => {
             const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-            this.downloadAll(timestamp);
+            this.downloadAllFiles(timestamp);
         });
     }
 
     async startRecording() {
         try {
+            console.log('🎬 Démarrage enregistrement...');
+            
+            // 🔥 NOUVEAU : Demande permission explicite avec options optimales
+            const constraints = {
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                    sampleRate: this.isMobile ? 16000 : 44100 // Optimisé mobile
+                }
+            };
+
+            // Fermer précédent stream s'il existe
+            if (this.audioStream) {
+                this.audioStream.getTracks().forEach(track => track.stop());
+            }
+
+            this.audioStream = await navigator.mediaDevices.getUserMedia(constraints);
+            console.log('✅ Accès micro obtenu');
+
             // Démarrer l'enregistrement audio
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.mediaRecorder = new MediaRecorder(stream);
+            this.mediaRecorder = new MediaRecorder(this.audioStream, {
+                mimeType: this.isMobile ? 'audio/webm' : 'audio/wav'
+            });
             this.audioChunks = [];
 
             this.mediaRecorder.ondataavailable = (event) => {
@@ -586,39 +540,82 @@ class TranscripteurReunion {
             };
 
             this.mediaRecorder.start();
+            console.log('✅ Enregistrement audio démarré');
 
-            // Démarrer la reconnaissance vocale
-            this.recognition.start();
+            // Démarrer la reconnaissance vocale avec délai de sécurité
+            setTimeout(() => {
+                if (this.recognition && this.isRecording) {
+                    try {
+                        this.recognition.start();
+                        console.log('✅ Reconnaissance vocale démarrée');
+                    } catch (error) {
+                        console.error('❌ Erreur démarrage reconnaissance:', error);
+                        // Réessayer après délai
+                        setTimeout(() => {
+                            if (this.isRecording) {
+                                this.restartRecognition();
+                            }
+                        }, 1000);
+                    }
+                }
+            }, this.isMobile ? 1000 : 500); // Délai plus long sur mobile
 
             // Mise à jour de l'interface
             this.isRecording = true;
             this.startTime = Date.now();
-            this.lastSpeechTime = Date.now(); // 🔥 NOUVEAU
+            this.lastSpeechTime = Date.now();
             this.startBtn.disabled = true;
             this.stopBtn.disabled = false;
             this.statusText.textContent = '🔴 Enregistrement en cours...';
             document.body.classList.add('recording');
 
+            // Démarrer le timer
             this.startTimer();
 
         } catch (error) {
-            console.error('Erreur accès microphone:', error);
-            alert('Impossible d\'accéder au microphone. Vérifiez les permissions.');
+            console.error('❌ Erreur startRecording:', error);
+            this.statusText.textContent = '❌ Erreur d\'accès au microphone';
+            this.isRecording = false;
+            this.startBtn.disabled = false;
+            this.stopBtn.disabled = true;
+            
+            // 🔥 NOUVEAU : Message spécifique PWA mobile
+            if (this.isMobile && this.isStandalone) {
+                setTimeout(() => {
+                    this.showMobileTroubleshooting();
+                }, 1000);
+            } else {
+                alert('❌ Impossible d\'accéder au microphone. Vérifiez les permissions.');
+            }
         }
     }
 
     stopRecording() {
-        // Arrêter tous les processus
+        console.log('🛑 Arrêt enregistrement...');
+        
         this.isRecording = false;
         
+        // Arrêter reconnaissance vocale
         if (this.recognition) {
-            this.recognition.stop();
+            try {
+                this.recognition.stop();
+            } catch (error) {
+                console.log('⚠️ Erreur arrêt reconnaissance:', error);
+            }
         }
 
-        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        // Arrêter enregistrement audio
+        if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
             this.mediaRecorder.stop();
         }
 
+        // Fermer stream audio
+        if (this.audioStream) {
+            this.audioStream.getTracks().forEach(track => track.stop());
+            this.audioStream = null;
+        }
+
+        // Nettoyer timeouts
         if (this.pauseTimeout) {
             clearTimeout(this.pauseTimeout);
             this.pauseTimeout = null;
@@ -627,41 +624,43 @@ class TranscripteurReunion {
         // Mise à jour interface
         this.startBtn.disabled = false;
         this.stopBtn.disabled = true;
-        this.statusText.textContent = '⏹️ Enregistrement terminé';
+        this.statusText.textContent = '✅ Enregistrement terminé';
         document.body.classList.remove('recording');
 
+        // Arrêter timer
         if (this.timer) {
             clearInterval(this.timer);
-            this.timer = null;
         }
+
+        // Améliorer transcription finale
+        if (this.transcriptionText.trim()) {
+            this.transcriptionText = this.improveTranscript(this.transcriptionText);
+            this.updateTranscription();
+            this.generateSummary();
+        }
+
+        console.log('✅ Enregistrement arrêté avec succès');
     }
 
     clearAll() {
-        // Réinitialiser toutes les données
         this.transcriptionText = '';
         this.rawTranscriptionText = '';
-        this.transcriptionSegments = []; // 🔥 NOUVEAU
-        this.audioChunks = [];
         this.transcriptionDiv.innerHTML = '';
         this.summaryDiv.innerHTML = '';
+        this.audioChunks = [];
+        this.transcriptionSegments = [];
         this.timerDisplay.textContent = '00:00';
         this.statusText.textContent = 'Prêt à enregistrer';
-
-        if (this.pauseTimeout) {
-            clearTimeout(this.pauseTimeout);
-            this.pauseTimeout = null;
+        
+        if (this.timer) {
+            clearInterval(this.timer);
         }
-    }
-
-    updateTranscription() {
-        this.transcriptionDiv.innerHTML = this.formatTranscriptionForDisplay(this.transcriptionText);
-        this.transcriptionDiv.scrollTop = this.transcriptionDiv.scrollHeight;
     }
 
     downloadFile(type) {
         const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
         
-        switch(type) {
+        switch (type) {
             case 'audio':
                 if (this.audioChunks.length === 0) {
                     alert('Aucun audio à télécharger');
@@ -693,7 +692,6 @@ class TranscripteurReunion {
         }
     }
 
-    // 🔥 AMÉLIORÉ : Format transcription avec paragraphes préservés
     formatTranscriptForDownload() {
         const currentDate = new Date().toLocaleDateString('fr-FR', {
             weekday: 'long',
@@ -711,10 +709,9 @@ class TranscripteurReunion {
         content += `⏱️  Durée : ${this.timerDisplay.textContent}\n\n`;
         content += '─'.repeat(80) + '\n\n';
 
-        // 🔥 FORMATAGE AVEC PARAGRAPHES PRÉSERVÉS
         const paragraphs = this.transcriptionText.split(/\n\n+/);
         
-        paragraphs.forEach((paragraph, index) => {
+                paragraphs.forEach((paragraph, index) => {
             if (paragraph.trim()) {
                 const cleanParagraph = paragraph.trim().replace(/\n/g, ' ');
                 const sentences = cleanParagraph.split(/[.!?]+/).filter(s => s.trim());
@@ -725,7 +722,7 @@ class TranscripteurReunion {
                     .filter(sentence => sentence.length > 0)
                     .join('. ') + '.';
 
-                                content += formattedParagraph + '\n\n';
+                content += formattedParagraph + '\n\n';
                 
                 // Ajout séparateur visuel entre sections importantes
                 if (index < paragraphs.length - 1 && formattedParagraph.length > 100) {
@@ -748,110 +745,77 @@ class TranscripteurReunion {
             day: 'numeric'
         });
 
-        // Extraction du contenu HTML proprement
+        let content = '='.repeat(80) + '\n';
+        content += '                RÉSUMÉ DE RÉUNION\n';
+        content += '='.repeat(80) + '\n\n';
+        content += `📅 Date : ${currentDate}\n`;
+        content += `⏱️  Durée : ${this.timerDisplay.textContent}\n\n`;
+        content += '─'.repeat(80) + '\n\n';
+
+        // Extraire le contenu texte du résumé HTML
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = this.summaryDiv.innerHTML;
-
-        let textContent = '='.repeat(65) + '\n';
-        textContent += '        📋 RÉSUMÉ EXÉCUTIF DE RÉUNION\n';
-        textContent += '='.repeat(65) + '\n\n';
-
-        // Extraction du sous-titre
-        const subtitleEl = tempDiv.querySelector('.summary-subtitle');
-        if (subtitleEl) {
-            textContent += `🎯 ${subtitleEl.textContent}\n`;
-        }
         
-        textContent += `📅 ${currentDate}\n\n`;
-        textContent += '─'.repeat(65) + '\n\n';
-
-        // Extraction des sections avec formatage propre
-        const sections = tempDiv.querySelectorAll('.summary-section');
-        sections.forEach((section, index) => {
-            const titleEl = section.querySelector('.summary-section-title');
-            const items = section.querySelectorAll('.summary-item');
-
-            if (titleEl) {
-                // Nettoyage du titre (enlever émojis pour version texte)
-                const cleanTitle = titleEl.textContent
-                    .replace(/[🎯✅❓💡]/g, '')
-                    .trim()
-                    .toUpperCase();
-                
-                textContent += `${cleanTitle}\n`;
-                textContent += '─'.repeat(cleanTitle.length) + '\n';
-            }
-
-            items.forEach(item => {
-                // 🔥 NETTOYAGE COMPLET - PHRASES FINIES
-                let itemText = item.textContent.trim();
-                
-                // Éliminer les artifacts HTML et "..."
-                itemText = itemText
-                    .replace(/★/g, '')
-                    .replace(/\.\.\.+$/g, '')
-                    .trim();
-                
-                // S'assurer que la phrase finit correctement
-                if (itemText && !itemText.match(/[.!?]$/)) {
-                    itemText += '.';
+        // Convertir en texte propre
+        const summaryText = tempDiv.textContent || tempDiv.innerText || '';
+        
+        // Nettoyer et structurer
+        const lines = summaryText.split('\n').filter(line => line.trim());
+        
+        lines.forEach(line => {
+            const trimmedLine = line.trim();
+            if (trimmedLine) {
+                // Détecter les titres de section
+                if (trimmedLine.includes('📋') || trimmedLine.includes('🎯') || 
+                    trimmedLine.includes('💡') || trimmedLine.includes('📊')) {
+                    content += '\n' + trimmedLine.toUpperCase() + '\n';
+                    content += '─'.repeat(40) + '\n';
                 }
-                
-                if (itemText) {
-                    textContent += `• ${itemText}\n`;
+                // Points numérotés
+                else if (/^\d+\./.test(trimmedLine)) {
+                    content += '  ' + trimmedLine + '\n\n';
                 }
-            });
-
-            // Espacement entre sections
-            if (index < sections.length - 1) {
-                textContent += '\n';
+                // Points avec puces
+                else if (trimmedLine.startsWith('•')) {
+                    content += '  ' + trimmedLine + '\n';
+                }
+                // Texte normal
+                else {
+                    content += trimmedLine + '\n';
+                }
             }
         });
 
-        // 🔥 NOUVEAU : Ajout highlight s'il existe
-        const highlightEl = tempDiv.querySelector('.summary-highlight');
-        if (highlightEl) {
-            let highlightText = highlightEl.textContent.trim();
-            highlightText = highlightText.replace(/\.\.\.+$/g, '');
-            if (highlightText && !highlightText.match(/[.!?]$/)) {
-                highlightText += '.';
-            }
-            if (highlightText) {
-                textContent += '\n💡 POINT CLÉ\n';
-                textContent += '─'.repeat(12) + '\n';
-                textContent += `${highlightText}\n`;
-            }
-        }
+        content += '\n' + '='.repeat(80) + '\n';
+        content += `Résumé généré automatiquement le ${new Date().toLocaleString('fr-FR')}`;
 
-        // Nettoyage final
-        textContent = textContent
-            .replace(/\n\n\n+/g, '\n\n') // Nettoyer excès sauts
-            .replace(/^\s+/gm, '') // Nettoyer espaces début ligne
-            .replace(/\s+$/gm, '') // Nettoyer espaces fin ligne
-            .trim(); // Suppression sauts fin
-
-        textContent += '\n\n' + '='.repeat(65) + '\n';
-        textContent += `Résumé généré le ${new Date().toLocaleString('fr-FR')}`;
-
-        return textContent;
+        return content;
     }
 
-    startTimer() {
-        this.timer = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
-            const minutes = Math.floor(elapsed / 60);
-            const seconds = elapsed % 60;
-            this.timerDisplay.textContent = 
-                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        }, 1000);
-    }
-
-    downloadAll(timestamp) {
+    downloadAllFiles(timestamp) {
+        // Télécharger tous les fichiers avec un délai entre chaque
+        const downloads = [];
+        
         if (this.audioChunks.length > 0) {
-            setTimeout(() => this.downloadFile('audio'), 100);
+            downloads.push(() => this.downloadFile('audio'));
         }
-        setTimeout(() => this.downloadFile('transcript'), 300);
-        setTimeout(() => this.downloadFile('summary'), 500);
+        
+        if (this.transcriptionText.trim()) {
+            downloads.push(() => this.downloadFile('transcript'));
+        }
+        
+        if (this.summaryDiv.innerHTML.trim()) {
+            downloads.push(() => this.downloadFile('summary'));
+        }
+
+        // Exécuter les téléchargements avec délai
+        downloads.forEach((download, index) => {
+            setTimeout(download, index * 500);
+        });
+
+        if (downloads.length === 0) {
+            alert('Aucun fichier à télécharger');
+        }
     }
 
     downloadBlob(blob, filename) {
@@ -865,10 +829,38 @@ class TranscripteurReunion {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
+
+    startTimer() {
+        this.timer = setInterval(() => {
+            const elapsed = Date.now() - this.startTime;
+            const minutes = Math.floor(elapsed / 60000);
+            const seconds = Math.floor((elapsed % 60000) / 1000);
+            this.timerDisplay.textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }, 1000);
+    }
 }
 
-// Initialisation de l'application
+// 🔥 NOUVEAU : Initialisation avec gestion d'erreurs et fallback
 document.addEventListener('DOMContentLoaded', () => {
-    new TranscripteurReunion();
+    try {
+        new TranscripteurReunion();
+        console.log('✅ Transcripteur initialisé avec succès');
+    } catch (error) {
+        console.error('❌ Erreur initialisation:', error);
+        
+        // Fallback simple en cas d'erreur
+        document.body.innerHTML = `
+            <div style="text-align: center; padding: 50px; font-family: Arial;">
+                <h2>❌ Erreur d'initialisation</h2>
+                <p>Veuillez recharger la page ou utiliser un navigateur compatible.</p>
+                <button onclick="location.reload()" style="background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; margin: 10px;">
+                    🔄 Recharger
+                </button>
+                <br><br>
+                <small>Navigateurs recommandés : Chrome, Edge, Firefox récent</small>
+            </div>
+        `;
+    }
 });
 
