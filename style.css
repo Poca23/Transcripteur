@@ -182,12 +182,53 @@ h1 {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
 }
 
+/* 🔥 NOUVEAU : Styles pour paragraphes avec pauses */
+#transcription .pause-break {
+    margin: 15px 0;
+    border-left: 4px solid #3498db;
+    padding-left: 15px;
+    position: relative;
+}
+
+#transcription .pause-break:before {
+    content: "• • •";
+    position: absolute;
+    left: -10px;
+    top: -20px;
+    color: #bdc3c7;
+    font-size: 12px;
+    background: white;
+    padding: 0 5px;
+}
+
+#transcription .transcript-segment {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: rgba(52, 152, 219, 0.02);
+    border-radius: 8px;
+    border-left: 3px solid #3498db;
+}
+
+#transcription .transcript-timestamp {
+    font-size: 11px;
+    color: #7f8c8d;
+    font-style: italic;
+    margin-bottom: 8px;
+    font-family: monospace;
+}
+
 .interim {
     color: #3498db;
     font-style: italic;
     background: rgba(52, 152, 219, 0.1);
     padding: 2px 4px;
     border-radius: 3px;
+    animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.5; }
 }
 
 /* 🔥 STYLES AVANCÉS POUR LE RÉSUMÉ FORMATÉ */
@@ -207,6 +248,26 @@ h1 {
     letter-spacing: 1px;
 }
 
+/* 🔥 NOUVEAU : Styles pour sous-titres dynamiques */
+#summary .summary-subtitle {
+    font-size: 16px;
+    color: #8e44ad;
+    font-weight: 600;
+    font-style: italic;
+    margin-bottom: 10px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 20px;
+    border: 2px solid #8e44ad;
+    display: inline-block;
+    text-transform: capitalize;
+}
+
+#summary .summary-subtitle:before {
+    content: "🎯 ";
+    font-style: normal;
+}
+
 #summary .summary-date {
     color: #7f8c8d;
     font-style: italic;
@@ -219,6 +280,12 @@ h1 {
     padding: 15px;
     border-radius: 8px;
     border-left: 4px solid #3498db;
+    transition: all 0.3s ease;
+}
+
+#summary .summary-section:hover {
+    background: rgba(52, 152, 219, 0.05);
+    transform: translateX(5px);
 }
 
 #summary .summary-section-title {
@@ -239,6 +306,13 @@ h1 {
     position: relative;
     line-height: 1.6;
     color: #34495e;
+    transition: all 0.2s ease;
+}
+
+#summary .summary-item:hover {
+    background: rgba(52, 152, 219, 0.05);
+    border-radius: 4px;
+    padding: 5px 5px 5px 20px;
 }
 
 #summary .summary-item:before {
@@ -248,21 +322,66 @@ h1 {
     color: #3498db;
     font-weight: bold;
     font-size: 16px;
+    animation: pulse-dot 2s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.2); }
 }
 
 #summary .summary-highlight {
     background: linear-gradient(120deg, #fff3cd, #ffeaa7);
-    padding: 8px 12px;
-    border-radius: 6px;
+    padding: 10px 15px;
+    border-radius: 8px;
     color: #856404;
     font-weight: 600;
     border: 1px solid #ffeaa7;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    margin: 10px 0;
+    position: relative;
+    overflow: hidden;
 }
 
 #summary .summary-highlight:before {
     content: "★";
     color: #f39c12;
+    margin-right: 8px;
+    animation: sparkle 2s infinite;
+}
+
+@keyframes sparkle {
+    0%, 100% { transform: scale(1) rotate(0deg); }
+    50% { transform: scale(1.1) rotate(10deg); }
+}
+
+#summary .summary-highlight:after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+    animation: shine 3s infinite;
+}
+
+@keyframes shine {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* 🔥 NOUVEAU : Indicateur de qualité du résumé */
+#summary .summary-quality {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    background: #27ae60;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 12px;
+    font-weight: bold;
 }
 
 .downloads {
@@ -326,6 +445,22 @@ h1 {
     animation: fadeInUp 0.6s ease-out;
 }
 
+/* 🔥 NOUVEAU : Animation d'apparition des segments */
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+#transcription .transcript-segment {
+    animation: slideInLeft 0.5s ease-out;
+}
+
 /* Scrollbar personnalisée */
 #transcription::-webkit-scrollbar,
 #summary::-webkit-scrollbar {
@@ -382,6 +517,16 @@ h1 {
     #summary .summary-section-title {
         font-size: 14px;
     }
+    
+    #summary .summary-subtitle {
+        font-size: 14px;
+        padding: 6px 12px;
+    }
+    
+    #transcription .transcript-segment {
+        padding: 10px;
+        margin-bottom: 15px;
+    }
 }
 
 /* États visuels pour l'enregistrement */
@@ -393,6 +538,23 @@ h1 {
 .recording .status {
     background: linear-gradient(135deg, #fee, #fcc);
     animation: pulse 2s infinite;
+}
+
+/* 🔥 NOUVEAU : Animation spéciale pendant enregistrement */
+.recording #transcription .transcript-segment:last-child {
+    border-left-color: #e74c3c;
+    animation: recording-pulse 1.5s infinite;
+}
+
+@keyframes recording-pulse {
+    0%, 100% { 
+        border-left-color: #e74c3c;
+        background: rgba(231, 76, 60, 0.05);
+    }
+    50% { 
+        border-left-color: #c0392b;
+        background: rgba(231, 76, 60, 0.1);
+    }
 }
 
 @keyframes pulse {
@@ -414,6 +576,33 @@ h1 {
 #transcription em, #summary em {
     color: #7f8c8d;
     font-style: italic;
+}
+
+/* 🔥 NOUVEAU : Indicateurs visuels de statut */
+.status-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+    animation: pulse-status 2s infinite;
+}
+
+.status-indicator.recording {
+    background: #e74c3c;
+}
+
+.status-indicator.ready {
+    background: #27ae60;
+}
+
+.status-indicator.processing {
+    background: #f39c12;
+}
+
+@keyframes pulse-status {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.1); }
 }
 
 /* Optimisation de l'impression */
@@ -441,5 +630,21 @@ h1 {
     #summary {
         font-size: 12px;
         line-height: 1.4;
+    }
+    
+    /* Masquer animations pour impression */
+    * {
+        animation: none !important;
+        transition: none !important;
+    }
+    
+    #transcription .transcript-segment {
+        border-left: 2px solid #333;
+        margin-bottom: 10px;
+    }
+    
+    #summary .summary-subtitle {
+        color: #333;
+        border: 1px solid #333;
     }
 }

@@ -8,6 +8,12 @@ class TranscripteurReunion {
         this.isRecording = false;
         this.startTime = null;
         this.timer = null;
+        
+        // 🔥 NOUVEAU : Gestion des pauses
+        this.lastSpeechTime = null;
+        this.pauseTimeout = null;
+        this.pauseThreshold = 2000; // 2 secondes
+        this.transcriptionSegments = []; // Pour créer des sous-titres
 
         // Dictionnaires d'amélioration
         this.initCorrectionDictionaries();
@@ -39,18 +45,33 @@ class TranscripteurReunion {
             'feedback': 'retour', 'business': 'affaires'
         };
 
-        // Mots-clés métier
-        this.businessKeywords = [
-            'budget', 'planning', 'deadline', 'livrable', 'milestone', 'objectif', 'target',
-            'kpi', 'roi', 'revenus', 'coûts', 'client', 'prospect', 'lead', 'conversion',
-            'marketing', 'commercial', 'ventes', 'négociation', 'projet', 'équipe'
-        ];
+        // Mots-clés métier avec scoring
+        this.businessKeywords = {
+            'budget': 3, 'planning': 2, 'deadline': 3, 'livrable': 2, 'milestone': 2,
+            'objectif': 3, 'target': 2, 'kpi': 3, 'roi': 3, 'revenus': 3, 'coûts': 2,
+            'client': 2, 'prospect': 2, 'lead': 2, 'conversion': 2, 'marketing': 2,
+            'commercial': 2, 'ventes': 2, 'négociation': 2, 'projet': 2, 'équipe': 1
+        };
 
         // Expressions à nettoyer
         this.fillerWords = [
             'euh', 'heu', 'hem', 'bon', 'voilà', 'donc euh', 'en fait', 'du coup',
             'genre', 'quoi', 'hein', 'bon ben', 'alors euh', 'et puis euh'
         ];
+
+        // 🔥 NOUVEAU : Mots-clés pour sous-titres automatiques
+        this.subtitleKeywords = {
+            'budget': ['Budget', 'Finances', 'Économie'],
+            'planning': ['Planning', 'Organisation', 'Calendrier'],
+            'objectif': ['Objectifs', 'Cibles', 'Ambitions'],
+            'problème': ['Problématiques', 'Difficultés', 'Enjeux'],
+            'solution': ['Solutions', 'Propositions', 'Résolutions'],
+            'équipe': ['Équipe', 'Ressources', 'Personnel'],
+            'client': ['Clients', 'Relations', 'Commercial'],
+            'projet': ['Projet', 'Développement', 'Réalisation'],
+            'décision': ['Décisions', 'Choix', 'Validations'],
+            'action': ['Actions', 'Tâches', 'Missions']
+        };
     }
 
     initElements() {
@@ -87,7 +108,15 @@ class TranscripteurReunion {
                 }
             };
 
+            // 🔥 NOUVEAU : Gestion des pauses et sauts de ligne
             this.recognition.onresult = (event) => {
+                this.lastSpeechTime = Date.now();
+                
+                // Annuler le timeout de pause précédent
+                if (this.pauseTimeout) {
+                    clearTimeout(this.pauseTimeout);
+                }
+
                 let finalTranscript = '';
                 let interimTranscript = '';
 
@@ -95,7 +124,15 @@ class TranscripteurReunion {
                     const transcript = event.results[i][0].transcript;
 
                     if (event.results[i].isFinal) {
-                        finalTranscript += this.improveTranscript(transcript) + '. ';
+                        const improvedText = this.improveTranscript(transcript);
+                        finalTranscript += improvedText + '. ';
+                        
+                        // 🔥 NOUVEAU : Stockage pour sous-titres
+                        this.transcriptionSegments.push({
+                            text: improvedText,
+                            timestamp: Date.now(),
+                            keywords: this.extractKeywords(improvedText)
+                        });
                     } else {
                         interimTranscript += this.quickImprove(transcript);
                     }
@@ -106,6 +143,9 @@ class TranscripteurReunion {
                     this.transcriptionText += finalTranscript;
                     this.updateTranscription();
                     this.generateSummary();
+
+                    // 🔥 Démarrer le timer pour détecter les pauses
+                    this.startPauseTimer();
                 }
 
                 this.transcriptionDiv.innerHTML = this.formatTranscriptionForDisplay(this.transcriptionText) + 
@@ -123,39 +163,94 @@ class TranscripteurReunion {
         }
     }
 
-    // 🔥 NOUVEAU : Formatage de la transcription avec paragraphes
-    formatTranscriptionForDisplay(text) {
-        if (!text) return '';
+    // 🔥 NOUVEAU : Gestion des pauses avec saut de ligne automatique
+    startPauseTimer() {
+        this.pauseTimeout = setTimeout(() => {
+            if (this.isRecording) {
+                this.transcriptionText += '\n\n';
+                this.updateTranscription();
+                console.log('Pause détectée - Saut de ligne ajouté');
+            }
+        }, this.pauseThreshold);
+    }
 
-        // Division en paragraphes logiques (tous les 3-4 phrases)
-        const sentences = text.split(/(?<=[.!?])\s+/);
-        let formatted = '';
-        let sentenceCount = 0;
+    // 🔥 NOUVEAU : Extraction des mots-clés pour sous-titres
+    extractKeywords(text) {
+        const lowerText = text.toLowerCase();
+        const foundKeywords = [];
 
-        sentences.forEach(sentence => {
-            if (sentence.trim()) {
-                formatted += sentence.trim();
-                
-                // Ajout d'un saut de ligne après certains mots clés
-                if (sentence.toLowerCase().includes('maintenant') || 
-                    sentence.toLowerCase().includes('ensuite') ||
-                    sentence.toLowerCase().includes('d\'autre part')) {
-                    formatted += '<br><br>';
-                    sentenceCount = 0;
-                } else {
-                    formatted += ' ';
-                    sentenceCount++;
-                    
-                    // Nouveau paragraphe tous les 3-4 phrases
-                    if (sentenceCount >= 4) {
-                        formatted += '<br><br>';
-                        sentenceCount = 0;
-                    }
-                }
+        Object.keys(this.businessKeywords).forEach(keyword => {
+            if (lowerText.includes(keyword)) {
+                foundKeywords.push(keyword);
             }
         });
 
-        return formatted.trim();
+        return foundKeywords;
+    }
+
+    // 🔥 NOUVEAU : Génération de sous-titres intelligents
+    generateSubtitle(segment) {
+        const keywords = segment.keywords;
+        if (keywords.length === 0) return 'Discussion Générale';
+
+        // Prioriser par ordre d'importance
+        const priorities = ['budget', 'objectif', 'projet', 'client', 'planning', 'équipe'];
+        for (let priority of priorities) {
+            if (keywords.includes(priority) && this.subtitleKeywords[priority]) {
+                return this.subtitleKeywords[priority][0];
+            }
+        }
+
+        // Fallback avec le premier mot-clé trouvé
+        const firstKeyword = keywords[0];
+        if (this.subtitleKeywords[firstKeyword]) {
+            return this.subtitleKeywords[firstKeyword][0];
+        }
+
+        return 'Points Importants';
+    }
+
+    // 🔥 NOUVEAU : Génération de sous-titre principal intelligent
+    generateMainSubtitle(analysis) {
+        const allSegments = this.transcriptionSegments;
+        const keywordCounts = {};
+
+        // Compter les occurrences des mots-clés
+        allSegments.forEach(segment => {
+            segment.keywords.forEach(keyword => {
+                keywordCounts[keyword] = (keywordCounts[keyword] || 0) + 1;
+            });
+        });
+
+        // Trouver le thème dominant
+        const sortedKeywords = Object.entries(keywordCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 2);
+
+        if (sortedKeywords.length === 0) return 'Réunion de Travail';
+
+        const [dominantKeyword] = sortedKeywords[0];
+        if (this.subtitleKeywords[dominantKeyword]) {
+            return this.subtitleKeywords[dominantKeyword][0] + ' & Stratégie';
+        }
+
+        return 'Points Stratégiques';
+    }
+
+    formatTranscriptionForDisplay(text) {
+        const paragraphs = text.split(/\n\n+/);
+        let formatted = '';
+
+        paragraphs.forEach((paragraph, index) => {
+            if (paragraph.trim()) {
+                formatted += `<div class="transcript-segment">
+                    <div class="transcript-timestamp">Segment ${index + 1}</div>
+                    ${paragraph.trim()}
+                </div>`;
+            }
+        });
+
+        return formatted;
     }
 
     improveTranscript(text) {
@@ -213,7 +308,7 @@ class TranscripteurReunion {
         return text;
     }
 
-    // 🔥 NOUVELLE VERSION : Génération de résumé avec formatage parfait
+    // 🔥 VERSION AMÉLIORÉE : Résumé avec sous-titres dynamiques
     generateSummary() {
         const sentences = this.transcriptionText.split(/[.!?]+/).filter(s => s.trim().length > 10);
         if (sentences.length === 0) return;
@@ -225,9 +320,13 @@ class TranscripteurReunion {
             day: 'numeric'
         });
 
-        // 🎯 RÉSUMÉ HTML AVEC FORMATAGE PROFESSIONNEL
+        // 🔥 NOUVEAU : Génération de sous-titre principal intelligent
+        const mainSubtitle = this.generateMainSubtitle(analysis);
+
+        // 🎯 RÉSUMÉ HTML AVEC SOUS-TITRE DYNAMIQUE
         let summaryHTML = `<div class="summary-header">
             <div class="summary-title">RÉSUMÉ DE RÉUNION</div>
+            <div class="summary-subtitle">${mainSubtitle}</div>
             <div class="summary-date">${currentDate}</div>
         </div>`;
 
@@ -236,7 +335,7 @@ class TranscripteurReunion {
             summaryHTML += `<div class="summary-section">
                 <div class="summary-section-title">🎯 POINTS ESSENTIELS</div>`;
             analysis.keyPoints.slice(0, 3).forEach(point => {
-                const cleanPoint = this.condenseSentence(point);
+                const cleanPoint = this.ensureCompleteSentence(point);
                 summaryHTML += `<div class="summary-item">${cleanPoint}</div>`;
             });
             summaryHTML += `</div>`;
@@ -247,7 +346,7 @@ class TranscripteurReunion {
             summaryHTML += `<div class="summary-section">
                 <div class="summary-section-title">✅ ACTIONS PRIORITAIRES</div>`;
             analysis.actions.slice(0, 4).forEach(action => {
-                const cleanAction = this.condenseSentence(action);
+                const cleanAction = this.ensureCompleteSentence(action);
                 summaryHTML += `<div class="summary-item">${cleanAction}</div>`;
             });
             summaryHTML += `</div>`;
@@ -258,77 +357,133 @@ class TranscripteurReunion {
             summaryHTML += `<div class="summary-section">
                 <div class="summary-section-title">🎯 DÉCISIONS PRISES</div>`;
             analysis.decisions.slice(0, 3).forEach(decision => {
-                const cleanDecision = this.condenseSentence(decision);
+                const cleanDecision = this.ensureCompleteSentence(decision);
                 summaryHTML += `<div class="summary-item">${cleanDecision}</div>`;
             });
             summaryHTML += `</div>`;
         }
 
-        // Section Points en Suspens
+        // Section Questions
         if (analysis.questions.length > 0) {
             summaryHTML += `<div class="summary-section">
-                <div class="summary-section-title">❓ POINTS EN SUSPENS</div>`;
+                <div class="summary-section-title">❓ QUESTIONS EN SUSPENS</div>`;
             analysis.questions.slice(0, 3).forEach(question => {
-                const cleanQuestion = this.condenseSentence(question);
+                const cleanQuestion = this.ensureCompleteSentence(question);
                 summaryHTML += `<div class="summary-item">${cleanQuestion}</div>`;
             });
             summaryHTML += `</div>`;
         }
 
-        // Synthèse finale si nécessaire
-        if (analysis.totalPoints > 8) {
-            const keyInsight = this.extractKeyInsight(sentences);
-            if (keyInsight) {
-                summaryHTML += `<div class="summary-section">
-                    <div class="summary-section-title">💡 SYNTHÈSE GÉNÉRALE</div>
-                    <div class="summary-item summary-highlight">${keyInsight}</div>
-                </div>`;
-            }
+        // Insight principal si disponible
+        const keyInsight = this.extractKeyInsight(sentences);
+        if (keyInsight) {
+            summaryHTML += `<div class="summary-highlight">
+                ${this.ensureCompleteSentence(keyInsight)}
+            </div>`;
         }
 
         this.summaryDiv.innerHTML = summaryHTML;
     }
 
-    analyzeTextForSummary(sentences) {
-        const result = { keyPoints: [], actions: [], decisions: [], questions: [], totalPoints: 0 };
+    // 🔥 NOUVEAU : Fonction pour s'assurer que les phrases sont complètes
+    ensureCompleteSentence(sentence) {
+        let cleaned = sentence.trim();
+        
+        // Supprimer les "..." en fin
+        cleaned = cleaned.replace(/\.\.\.+$/g, '');
+        
+        // Nettoyer les expressions redondantes
+        const redundantPhrases = [
+            'je pense que', 'il me semble que', 'à mon avis',
+            'en fait', 'du coup', 'donc voilà', 'bon ben'
+        ];
 
-        const actionTriggers = {
-            'il faut': 3, 'nous devons': 3, 'il faudra': 3, 'action': 2,
-            'faire': 1, 'créer': 2, 'envoyer': 1, 'préparer': 2,
-            'organiser': 2, 'contacter': 1, 'planifier': 2, 'livrer': 3
+        redundantPhrases.forEach(phrase => {
+            cleaned = cleaned.replace(new RegExp(`^${phrase}\\s+`, 'gi'), '');
+            cleaned = cleaned.replace(new RegExp(`\\s+${phrase}\\s+`, 'gi'), ' ');
+        });
+
+        // Raccourcir intelligemment les phrases trop longues sans couper
+        if (cleaned.length > 150) {
+            // Chercher une virgule ou un point-virgule proche de 120 caractères
+            const cutPoints = [',', ';', ' et ', ' mais ', ' car '];
+            let bestCut = -1;
+            
+            for (let cutPoint of cutPoints) {
+                const index = cleaned.lastIndexOf(cutPoint, 120);
+                if (index > 80) {
+                    bestCut = index + cutPoint.length;
+                    break;
+                }
+            }
+            
+            if (bestCut > 0) {
+                cleaned = cleaned.substring(0, bestCut).trim();
+            } else if (cleaned.length > 140) {
+                // En dernier recours, couper au mot le plus proche
+                const words = cleaned.substring(0, 120).split(' ');
+                words.pop(); // Supprimer le dernier mot potentiellement coupé
+                cleaned = words.join(' ');
+            }
+        }
+
+        // S'assurer que la phrase finit par un point
+        if (cleaned && !cleaned.match(/[.!?]$/)) {
+            cleaned += '.';
+        }
+
+        return cleaned;
+    }
+
+    analyzeTextForSummary(sentences) {
+        const result = {
+            keyPoints: [],
+            actions: [],
+            decisions: [],
+            questions: [],
+            totalPoints: 0
         };
 
-        const decisionTriggers = {
-            'décision': 3, 'décidé': 3, 'choix': 2, 'retenu': 2,
-            'validé': 3, 'approuvé': 3, 'choisi': 2, 'opté': 2
+        const actionTriggers = {
+            'il faut': 3, 'nous devons': 3, 'il faudra': 3, 'on doit': 3,
+            'action': 2, 'tâche': 2, 'faire': 1, 'réaliser': 2
         };
 
         const questionTriggers = {
-            'question': 2, 'problème': 3, 'comment': 1, 'pourquoi': 1,
-            'reste à': 2, 'à clarifier': 3, 'à voir': 2
+            'question': 3, 'problème': 2, 'comment': 2, 'pourquoi': 2,
+            'qu\'est-ce': 2, 'est-ce que': 2
         };
 
-        const importantTriggers = {
-            'important': 3, 'essentiel': 3, 'critique': 3, 'urgent': 3,
-            'priorité': 3, 'objectif': 2, 'budget': 2, 'deadline': 3
+        const decisionTriggers = {
+            'décision': 3, 'choix': 2, 'opter': 2, 'retenir': 2,
+            'valider': 2, 'approuver': 2, 'décider': 3
         };
 
         sentences.forEach(sentence => {
-            const lowerSentence = sentence.toLowerCase().trim();
-            if (lowerSentence.length < 15) return;
-
-            let maxScore = 0;
-            let category = null;
+            sentence = sentence.trim();
+            const lowerSentence = sentence.toLowerCase();
+            
+            if (sentence.length < 15) return;
 
             const actionScore = this.calculateScore(lowerSentence, actionTriggers);
-            const decisionScore = this.calculateScore(lowerSentence, decisionTriggers);
             const questionScore = this.calculateScore(lowerSentence, questionTriggers);
-            const importantScore = this.calculateScore(lowerSentence, importantTriggers);
+            const decisionScore = this.calculateScore(lowerSentence, decisionTriggers);
 
-            if (actionScore > maxScore) { maxScore = actionScore; category = 'actions'; }
-            if (decisionScore > maxScore) { maxScore = decisionScore; category = 'decisions'; }
-            if (questionScore > maxScore) { maxScore = questionScore; category = 'questions'; }
-            if (importantScore > maxScore) { maxScore = importantScore; category = 'keyPoints'; }
+            // Calcul score importance basé sur mots-clés métier
+            let importantScore = 0;
+            Object.entries(this.businessKeywords).forEach(([keyword, weight]) => {
+                if (lowerSentence.includes(keyword)) {
+                    importantScore += weight;
+                }
+            });
+
+            // Classification
+            let maxScore = Math.max(actionScore, questionScore, decisionScore, importantScore);
+            let category = 'keyPoints';
+
+            if (actionScore > maxScore * 0.8) category = 'actions';
+            if (decisionScore > maxScore * 0.8) category = 'decisions';
+            if (questionScore > maxScore * 0.8) category = 'questions';
 
             if (maxScore >= 2) {
                 result[category].push({ sentence: sentence.trim(), score: maxScore });
@@ -365,83 +520,63 @@ class TranscripteurReunion {
         return score;
     }
 
-    condenseSentence(sentence) {
-        let condensed = sentence.trim();
-
-        const redundantPhrases = [
-            'je pense que', 'il me semble que', 'à mon avis',
-            'en fait', 'du coup', 'donc voilà', 'bon ben'
-        ];
-
-        redundantPhrases.forEach(phrase => {
-            condensed = condensed.replace(new RegExp(phrase, 'gi'), '');
-        });
-
-        const shortenings = {
-            'il faut que nous': 'nous devons',
-            'il va falloir que': 'il faut',
-            'nous allons devoir': 'nous devons'
-        };
-
-        Object.entries(shortenings).forEach(([long, short]) => {
-            condensed = condensed.replace(new RegExp(long, 'gi'), short);
-        });
-
-        if (condensed.length > 120) {
-            condensed = condensed.substring(0, 117) + '...';
-        }
-
-        return condensed.trim();
-    }
-
     extractKeyInsight(sentences) {
         const insights = sentences.filter(s => {
             const lower = s.toLowerCase();
-            return (lower.includes('résultat') || lower.includes('conclusion') || 
-                   lower.includes('important') || lower.includes('essentiel')) && 
-                   s.length > 50;
+            return (lower.includes('résultat') || lower.includes('conclusion') ||
+                   lower.includes('impact') || lower.includes('bilan') ||
+                   lower.includes('principal') || lower.includes('essentiel'));
         });
 
-        return insights.length > 0 ? this.condenseSentence(insights[0]) : null;
+        if (insights.length > 0) {
+            return this.ensureCompleteSentence(insights[0]);
+        }
+
+        // Fallback: prendre la phrase la plus longue avec des mots-clés importants
+        const importantSentences = sentences.filter(s => {
+            const lower = s.toLowerCase();
+            return (lower.includes('objectif') || lower.includes('projet') ||
+                   lower.includes('équipe') || lower.includes('client'));
+        });
+
+        if (importantSentences.length > 0) {
+            const longest = importantSentences.reduce((a, b) => a.length > b.length ? a : b);
+            return this.ensureCompleteSentence(longest);
+        }
+
+        return null;
     }
 
     sentenceSimilarity(sentence1, sentence2) {
-        const words1 = sentence1.toLowerCase().split(' ');
-        const words2 = sentence2.toLowerCase().split(' ');
-        const commonWords = words1.filter(word => words2.includes(word));
-
-        return commonWords.length / Math.max(words1.length, words2.length);
+        const words1 = sentence1.toLowerCase().split(' ').filter(w => w.length > 3);
+        const words2 = sentence2.toLowerCase().split(' ').filter(w => w.length > 3);
+        
+        if (words1.length === 0 || words2.length === 0) return 0;
+        
+        const intersection = words1.filter(word => words2.includes(word));
+        return intersection.length / Math.max(words1.length, words2.length);
     }
 
-    async bindEvents() {
+    bindEvents() {
         this.startBtn.addEventListener('click', () => this.startRecording());
         this.stopBtn.addEventListener('click', () => this.stopRecording());
         this.clearBtn.addEventListener('click', () => this.clearAll());
+
+        // Téléchargements
         this.downloadAudio.addEventListener('click', () => this.downloadFile('audio'));
         this.downloadTranscript.addEventListener('click', () => this.downloadFile('transcript'));
         this.downloadSummary.addEventListener('click', () => this.downloadFile('summary'));
-        this.downloadAll.addEventListener('click', () => this.downloadFile('all'));
+        this.downloadAll.addEventListener('click', () => {
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+            this.downloadAll(timestamp);
+        });
     }
 
     async startRecording() {
         try {
-            const constraints = {
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                    sampleRate: 16000
-                }
-            };
-
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-            this.mediaRecorder = new MediaRecorder(stream, {
-                mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
-                    ? 'audio/webm;codecs=opus' 
-                    : 'audio/webm'
-            });
-
+            // Démarrer l'enregistrement audio
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.mediaRecorder = new MediaRecorder(stream);
             this.audioChunks = [];
 
             this.mediaRecorder.ondataavailable = (event) => {
@@ -450,56 +585,255 @@ class TranscripteurReunion {
                 }
             };
 
-            this.mediaRecorder.start(1000);
+            this.mediaRecorder.start();
+
+            // Démarrer la reconnaissance vocale
             this.recognition.start();
 
+            // Mise à jour de l'interface
             this.isRecording = true;
             this.startTime = Date.now();
-            this.startTimer();
-
+            this.lastSpeechTime = Date.now(); // 🔥 NOUVEAU
             this.startBtn.disabled = true;
             this.stopBtn.disabled = false;
-            this.statusText.textContent = '🔴 Enregistrement en cours - Qualité optimisée';
+            this.statusText.textContent = '🔴 Enregistrement en cours...';
+            document.body.classList.add('recording');
+
+            this.startTimer();
 
         } catch (error) {
-            console.error('Erreur démarrage:', error);
-            alert('Erreur: Impossible d\'accéder au microphone');
+            console.error('Erreur accès microphone:', error);
+            alert('Impossible d\'accéder au microphone. Vérifiez les permissions.');
         }
     }
 
     stopRecording() {
-        if (this.mediaRecorder && this.isRecording) {
-            this.mediaRecorder.stop();
+        // Arrêter tous les processus
+        this.isRecording = false;
+        
+        if (this.recognition) {
             this.recognition.stop();
+        }
 
-            this.isRecording = false;
-            this.stopTimer();
+        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+            this.mediaRecorder.stop();
+        }
 
-            this.transcriptionText = this.finalPostProcessing(this.transcriptionText);
-            this.updateTranscription();
-            this.generateSummary();
+        if (this.pauseTimeout) {
+            clearTimeout(this.pauseTimeout);
+            this.pauseTimeout = null;
+        }
 
-            this.startBtn.disabled = false;
-            this.stopBtn.disabled = true;
-            this.statusText.textContent = '✅ Enregistrement terminé - Transcription optimisée';
+        // Mise à jour interface
+        this.startBtn.disabled = false;
+        this.stopBtn.disabled = true;
+        this.statusText.textContent = '⏹️ Enregistrement terminé';
+        document.body.classList.remove('recording');
+
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
         }
     }
 
-    finalPostProcessing(text) {
-        text = this.removeRepetitions(text);
-        text = this.improveStructure(text);
-        return text.trim();
+    clearAll() {
+        // Réinitialiser toutes les données
+        this.transcriptionText = '';
+        this.rawTranscriptionText = '';
+        this.transcriptionSegments = []; // 🔥 NOUVEAU
+        this.audioChunks = [];
+        this.transcriptionDiv.innerHTML = '';
+        this.summaryDiv.innerHTML = '';
+        this.timerDisplay.textContent = '00:00';
+        this.statusText.textContent = 'Prêt à enregistrer';
+
+        if (this.pauseTimeout) {
+            clearTimeout(this.pauseTimeout);
+            this.pauseTimeout = null;
+        }
     }
 
-    removeRepetitions(text) {
-        return text.replace(/\b(\w+)(?:\s+\1\b)+/gi, '$1');
+    updateTranscription() {
+        this.transcriptionDiv.innerHTML = this.formatTranscriptionForDisplay(this.transcriptionText);
+        this.transcriptionDiv.scrollTop = this.transcriptionDiv.scrollHeight;
     }
 
-    improveStructure(text) {
-        return text
-            .replace(/\s*\.\s*\./g, '.')
-            .replace(/\s+/g, ' ')
-            .replace(/\.\s*([a-z])/g, (match, p1) => '. ' + p1.toUpperCase());
+    downloadFile(type) {
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+        
+        switch(type) {
+            case 'audio':
+                if (this.audioChunks.length === 0) {
+                    alert('Aucun audio à télécharger');
+                    return;
+                }
+                const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
+                this.downloadBlob(audioBlob, `reunion_audio_${timestamp}.wav`);
+                break;
+
+            case 'transcript':
+                if (!this.transcriptionText.trim()) {
+                    alert('Aucune transcription à télécharger');
+                    return;
+                }
+                const transcriptContent = this.formatTranscriptForDownload();
+                const transcriptBlob = new Blob([transcriptContent], { type: 'text/plain;charset=utf-8' });
+                this.downloadBlob(transcriptBlob, `reunion_transcription_${timestamp}.txt`);
+                break;
+
+            case 'summary':
+                if (!this.summaryDiv.innerHTML.trim()) {
+                    alert('Aucun résumé à télécharger');
+                    return;
+                }
+                const summaryContent = this.formatSummaryForDownload();
+                const summaryBlob = new Blob([summaryContent], { type: 'text/plain;charset=utf-8' });
+                this.downloadBlob(summaryBlob, `reunion_resume_${timestamp}.txt`);
+                break;
+        }
+    }
+
+    // 🔥 AMÉLIORÉ : Format transcription avec paragraphes préservés
+    formatTranscriptForDownload() {
+        const currentDate = new Date().toLocaleDateString('fr-FR', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        let content = '='.repeat(80) + '\n';
+        content += '             TRANSCRIPTION DE RÉUNION\n';
+        content += '='.repeat(80) + '\n\n';
+        content += `📅 Date : ${currentDate}\n`;
+        content += `⏱️  Durée : ${this.timerDisplay.textContent}\n\n`;
+        content += '─'.repeat(80) + '\n\n';
+
+        // 🔥 FORMATAGE AVEC PARAGRAPHES PRÉSERVÉS
+        const paragraphs = this.transcriptionText.split(/\n\n+/);
+        
+        paragraphs.forEach((paragraph, index) => {
+            if (paragraph.trim()) {
+                const cleanParagraph = paragraph.trim().replace(/\n/g, ' ');
+                const sentences = cleanParagraph.split(/[.!?]+/).filter(s => s.trim());
+                
+                // Reformater en paragraphe lisible
+                const formattedParagraph = sentences
+                    .map(sentence => sentence.trim())
+                    .filter(sentence => sentence.length > 0)
+                    .join('. ') + '.';
+
+                                content += formattedParagraph + '\n\n';
+                
+                // Ajout séparateur visuel entre sections importantes
+                if (index < paragraphs.length - 1 && formattedParagraph.length > 100) {
+                    content += '• • •\n\n';
+                }
+            }
+        });
+
+        content += '\n' + '='.repeat(80) + '\n';
+        content += `Transcription générée automatiquement le ${new Date().toLocaleString('fr-FR')}`;
+
+        return content;
+    }
+
+    // 🔥 AMÉLIORÉ : Format résumé sans traces HTML/Markdown - PHRASES COMPLÈTES
+    formatSummaryForDownload() {
+        const currentDate = new Date().toLocaleDateString('fr-FR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
+        // Extraction du contenu HTML proprement
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = this.summaryDiv.innerHTML;
+
+        let textContent = '='.repeat(65) + '\n';
+        textContent += '        📋 RÉSUMÉ EXÉCUTIF DE RÉUNION\n';
+        textContent += '='.repeat(65) + '\n\n';
+
+        // Extraction du sous-titre
+        const subtitleEl = tempDiv.querySelector('.summary-subtitle');
+        if (subtitleEl) {
+            textContent += `🎯 ${subtitleEl.textContent}\n`;
+        }
+        
+        textContent += `📅 ${currentDate}\n\n`;
+        textContent += '─'.repeat(65) + '\n\n';
+
+        // Extraction des sections avec formatage propre
+        const sections = tempDiv.querySelectorAll('.summary-section');
+        sections.forEach((section, index) => {
+            const titleEl = section.querySelector('.summary-section-title');
+            const items = section.querySelectorAll('.summary-item');
+
+            if (titleEl) {
+                // Nettoyage du titre (enlever émojis pour version texte)
+                const cleanTitle = titleEl.textContent
+                    .replace(/[🎯✅❓💡]/g, '')
+                    .trim()
+                    .toUpperCase();
+                
+                textContent += `${cleanTitle}\n`;
+                textContent += '─'.repeat(cleanTitle.length) + '\n';
+            }
+
+            items.forEach(item => {
+                // 🔥 NETTOYAGE COMPLET - PHRASES FINIES
+                let itemText = item.textContent.trim();
+                
+                // Éliminer les artifacts HTML et "..."
+                itemText = itemText
+                    .replace(/★/g, '')
+                    .replace(/\.\.\.+$/g, '')
+                    .trim();
+                
+                // S'assurer que la phrase finit correctement
+                if (itemText && !itemText.match(/[.!?]$/)) {
+                    itemText += '.';
+                }
+                
+                if (itemText) {
+                    textContent += `• ${itemText}\n`;
+                }
+            });
+
+            // Espacement entre sections
+            if (index < sections.length - 1) {
+                textContent += '\n';
+            }
+        });
+
+        // 🔥 NOUVEAU : Ajout highlight s'il existe
+        const highlightEl = tempDiv.querySelector('.summary-highlight');
+        if (highlightEl) {
+            let highlightText = highlightEl.textContent.trim();
+            highlightText = highlightText.replace(/\.\.\.+$/g, '');
+            if (highlightText && !highlightText.match(/[.!?]$/)) {
+                highlightText += '.';
+            }
+            if (highlightText) {
+                textContent += '\n💡 POINT CLÉ\n';
+                textContent += '─'.repeat(12) + '\n';
+                textContent += `${highlightText}\n`;
+            }
+        }
+
+        // Nettoyage final
+        textContent = textContent
+            .replace(/\n\n\n+/g, '\n\n') // Nettoyer excès sauts
+            .replace(/^\s+/gm, '') // Nettoyer espaces début ligne
+            .replace(/\s+$/gm, '') // Nettoyer espaces fin ligne
+            .trim(); // Suppression sauts fin
+
+        textContent += '\n\n' + '='.repeat(65) + '\n';
+        textContent += `Résumé généré le ${new Date().toLocaleString('fr-FR')}`;
+
+        return textContent;
     }
 
     startTimer() {
@@ -510,142 +844,6 @@ class TranscripteurReunion {
             this.timerDisplay.textContent = 
                 `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         }, 1000);
-    }
-
-    stopTimer() {
-        if (this.timer) {
-            clearInterval(this.timer);
-            this.timer = null;
-        }
-    }
-
-    updateTranscription() {
-        this.transcriptionDiv.innerHTML = this.formatTranscriptionForDisplay(this.transcriptionText);
-    }
-
-    clearAll() {
-        if (confirm('Effacer tout le contenu ?')) {
-            this.transcriptionText = '';
-            this.rawTranscriptionText = '';
-            this.transcriptionDiv.innerHTML = '';
-            this.summaryDiv.innerHTML = '';
-            this.audioChunks = [];
-            this.timerDisplay.textContent = '00:00';
-            this.statusText.textContent = 'Prêt à enregistrer';
-        }
-    }
-
-    downloadFile(type) {
-        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-
-        switch(type) {
-            case 'audio':
-                if (this.audioChunks.length > 0) {
-                    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
-                    this.downloadBlob(audioBlob, `reunion-audio-${timestamp}.webm`);
-                }
-                break;
-
-            case 'transcript':
-                const transcriptText = this.formatTranscriptionForDownload(this.transcriptionText);
-                const transcriptBlob = new Blob([transcriptText], { type: 'text/plain;charset=utf-8' });
-                this.downloadBlob(transcriptBlob, `transcription-formatee-${timestamp}.txt`);
-                break;
-
-            case 'summary':
-                const summaryHTML = this.summaryDiv.innerHTML;
-                const summaryText = this.convertSummaryToFormattedText(summaryHTML);
-                const summaryBlob = new Blob([summaryText], { type: 'text/plain;charset=utf-8' });
-                this.downloadBlob(summaryBlob, `resume-professionnel-${timestamp}.txt`);
-                break;
-
-            case 'all':
-                this.downloadAll(timestamp);
-                break;
-        }
-    }
-
-    // 🔥 NOUVEAU : Formatage de la transcription pour téléchargement
-    formatTranscriptionForDownload(text) {
-        if (!text) return 'Aucune transcription disponible.';
-
-        const currentDate = new Date().toLocaleDateString('fr-FR', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
-
-        const sentences = text.split(/(?<=[.!?])\s+/);
-        let formatted = `TRANSCRIPTION DE RÉUNION\n${currentDate}\n\n`;
-        formatted += '=' .repeat(50) + '\n\n';
-
-        let paragraphSentences = [];
-        
-        sentences.forEach((sentence, index) => {
-            if (sentence.trim()) {
-                paragraphSentences.push(sentence.trim());
-                
-                // Nouveau paragraphe tous les 3-4 phrases ou sur mots-clés
-                if (paragraphSentences.length >= 4 || 
-                    sentence.toLowerCase().includes('maintenant') ||
-                    sentence.toLowerCase().includes('ensuite') ||
-                    sentence.toLowerCase().includes('d\'autre part')) {
-                    
-                    formatted += paragraphSentences.join(' ') + '\n\n';
-                    paragraphSentences = [];
-                }
-            }
-        });
-
-        // Ajout des phrases restantes
-        if (paragraphSentences.length > 0) {
-            formatted += paragraphSentences.join(' ') + '\n\n';
-        }
-
-        formatted += '=' .repeat(50) + '\n';
-        formatted += `Fin de la transcription - ${new Date().toLocaleTimeString('fr-FR')}`;
-
-        return formatted;
-    }
-
-    // 🔥 NOUVEAU : Conversion HTML du résumé vers texte formaté professionnel
-    convertSummaryToFormattedText(htmlContent) {
-        if (!htmlContent) return 'Aucun résumé disponible.';
-
-        let textContent = htmlContent;
-
-        // Remplacement des balises par formatage texte professionnel
-        textContent = textContent
-            // En-tête principal
-            .replace(/<div class="summary-header">[\s\S]*?<div class="summary-title">(.*?)<\/div>[\s\S]*?<div class="summary-date">(.*?)<\/div>[\s\S]*?<\/div>/g, 
-                '$1\n$2\n\n' + '='.repeat(60) + '\n')
-            
-            // Sections principales
-            .replace(/<div class="summary-section-title">(.*?)<\/div>/g, '\n\n$1\n' + '-'.repeat(30))
-            
-            // Items avec puces
-            .replace(/<div class="summary-item">(.*?)<\/div>/g, '\n  • $1')
-            
-            // Highlights
-            .replace(/<div class="summary-item summary-highlight">(.*?)<\/div>/g, '\n  ★ $1')
-            
-            // Nettoyage des balises restantes
-            .replace(/<div class="summary-section">/g, '')
-            .replace(/<\/div>/g, '')
-            .replace(/<br>/g, '\n')
-            .replace(/&nbsp;/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-        // Formatage final
-        textContent = textContent
-            .replace(/\n\s*\n\s*\n/g, '\n\n') // Triple saut = double saut
-            .replace(/^\n+/, '') // Suppression sauts début
-            .replace(/\n+$/, '') // Suppression sauts fin
-            + '\n\n' + '='.repeat(60) + '\n'
-            + `Résumé généré le ${new Date().toLocaleString('fr-FR')}`;
-
-        return textContent;
     }
 
     downloadAll(timestamp) {
@@ -673,3 +871,4 @@ class TranscripteurReunion {
 document.addEventListener('DOMContentLoaded', () => {
     new TranscripteurReunion();
 });
+
