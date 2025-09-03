@@ -1,58 +1,133 @@
 <!DOCTYPE html>
 <html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Transcripteur de Réunions</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#007bff">
-    <link rel="apple-touch-icon" href="./assets/icon-192.png">
+    <link rel="stylesheet" href="style.css" />
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#007bff" />
+    <link rel="apple-touch-icon" href="./assets/icon-192.png" />
     <script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js')
-                .then(registration => console.log('SW registered'))
-                .catch(error => console.log('SW registration failed'));
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("./sw.js")
+            .then((registration) => console.log("SW registered"))
+            .catch((error) => console.log("SW registration failed"));
         });
-    }
+      }
     </script>
-</head>
-<body>
-    <div class="container">
-        <h1>🎤 Transcripteur de Réunions</h1>
+  </head>
+  <body>
+    <!-- 🔥 NOUVEAU : Overlay d'activation microphone -->
+    <div id="microphoneActivation" class="microphone-overlay">
+      <div class="microphone-modal">
+        <div class="microphone-icon">🎤</div>
+        <h2>Activation du microphone</h2>
+        <p>
+          Pour utiliser le transcripteur, vous devez autoriser l'accès au
+          microphone.
+        </p>
+        <button id="activateMicrophoneBtn" class="btn-activate">
+          🎤 ACTIVER LE MICROPHONE
+        </button>
+        <div class="microphone-info">
+          <small>
+            📱 <strong>Mobile :</strong> Appuyez sur "Autoriser" dans la
+            popup<br />
+            🍎 <strong>iOS :</strong> Vérifiez Réglages → Safari → Microphone<br />
+            🤖 <strong>Android :</strong> Vérifiez Paramètres → Chrome →
+            Autorisations
+          </small>
+        </div>
+      </div>
+    </div>
 
-        <div class="controls">
-            <button id="startBtn" class="btn primary">Démarrer</button>
-            <button id="stopBtn" class="btn secondary" disabled>Arrêter</button>
-            <button id="clearBtn" class="btn danger">Effacer</button>
+    <!-- 🔥 NOUVEAU : Écran d'erreur permissions -->
+    <div id="permissionError" class="error-overlay" style="display: none">
+      <div class="error-modal">
+        <div class="error-icon">⚠️</div>
+        <h2>Microphone non autorisé</h2>
+        <p>Le microphone est nécessaire pour la transcription.</p>
+
+        <div class="error-instructions">
+          <h4>📱 Instructions selon votre appareil :</h4>
+
+          <div class="instruction-item">
+            <strong>🍎 iPhone/iPad :</strong><br />
+            Réglages → Safari → Microphone → Autoriser
+          </div>
+
+          <div class="instruction-item">
+            <strong>🤖 Android :</strong><br />
+            Paramètres → Apps → Chrome → Autorisations → Microphone
+          </div>
+
+          <div class="instruction-item">
+            <strong>💻 Ordinateur :</strong><br />
+            Clic sur l'icône 🔒 dans la barre d'adresse
+          </div>
         </div>
 
-        <div class="status">
-            <span id="statusText">Prêt à enregistrer</span>
-            <div id="timer">00:00</div>
+        <div class="error-actions">
+          <button id="retryPermissionBtn" class="btn-retry">
+            🔄 RÉESSAYER
+          </button>
+          <button id="refreshPageBtn" class="btn-refresh">
+            ↻ ACTUALISER LA PAGE
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interface principale (cachée au démarrage) -->
+    <div class="container" id="mainInterface" style="display: none">
+      <h1>🎤 Transcripteur de Réunions</h1>
+
+      <div class="controls">
+        <button id="startBtn" class="btn primary" disabled>Démarrer</button>
+        <button id="stopBtn" class="btn secondary" disabled>Arrêter</button>
+        <button id="clearBtn" class="btn danger" disabled>Effacer</button>
+      </div>
+
+      <div class="status">
+        <span id="statusText">Microphone en cours d'activation...</span>
+        <div id="timer">00:00</div>
+      </div>
+
+      <div class="content">
+        <div class="section">
+          <h3>📝 Transcription en temps réel</h3>
+          <div
+            id="transcription"
+            contenteditable="true"
+            placeholder="La transcription apparaîtra ici..."
+          ></div>
         </div>
 
-        <div class="content">
-            <div class="section">
-                <h3>📝 Transcription en temps réel</h3>
-                <div id="transcription" contenteditable="true" placeholder="La transcription apparaîtra ici..."></div>
-            </div>
-
-            <div class="section">
-                <h3>📋 Résumé automatique</h3>
-                <div id="summary" contenteditable="true" placeholder="Le résumé sera généré ici..."></div>
-            </div>
+        <div class="section">
+          <h3>📋 Résumé automatique</h3>
+          <div
+            id="summary"
+            contenteditable="true"
+            placeholder="Le résumé sera généré ici..."
+          ></div>
         </div>
+      </div>
 
-        <div class="downloads">
-            <button id="downloadAudio" class="btn">⬇️ Audio</button>
-            <button id="downloadTranscript" class="btn">⬇️ Transcription</button>
-            <button id="downloadSummary" class="btn">⬇️ Résumé</button>
-            <button id="downloadAll" class="btn primary">⬇️ Tout télécharger</button>
-        </div>
+      <div class="downloads">
+        <button id="downloadAudio" class="btn" disabled>⬇️ Audio</button>
+        <button id="downloadTranscript" class="btn" disabled>
+          ⬇️ Transcription
+        </button>
+        <button id="downloadSummary" class="btn" disabled>⬇️ Résumé</button>
+        <button id="downloadAll" class="btn primary" disabled>
+          ⬇️ Tout télécharger
+        </button>
+      </div>
     </div>
 
     <script src="app.js"></script>
-</body>
+  </body>
 </html>
